@@ -22,10 +22,17 @@ function App() {
   const [mobileMenu, setMobileMenu] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const isAttemptRoute = /^\/exams\/[^/]+\/attempt\/[^/]+$/.test(location);
   useEffect(() => { if (!session && location !== '/login') setLocation('/login'); if (session && location === '/login') setLocation('/dashboard'); }, [session, location, setLocation]);
   const login = () => { try { setSession(mockService.signIn()); setStorageError(''); setLocation('/dashboard'); } catch (error) { setStorageError(error instanceof Error ? error.message : 'Sign-in could not be saved.'); } };
   const logout = () => { try { mockService.signOut(); setSession(null); setLocation('/login'); setStorageError(''); } catch (error) { setStorageError(error instanceof Error ? error.message : 'Sign-out failed.'); } };
   if (!session) return <Login onLogin={login} error={storageError} />;
+  if (isAttemptRoute) {
+    return <Switch>
+      <Route path="/exams/:examId/attempt/:attemptId" component={ExamAttempt} />
+      <Route component={NotFound} />
+    </Switch>;
+  }
   return <div className="app-shell">
     <aside className={`sidebar ${mobileMenu ? 'sidebar-open' : ''}`}>
       <Link href="/dashboard" className="brand" data-testid="link-brand"><span className="brand-mark"><GraduationCap size={21} /></span><span><strong>Madda Walabu</strong><small>UNIVERSITY EXAMINATIONS</small></span></Link>
