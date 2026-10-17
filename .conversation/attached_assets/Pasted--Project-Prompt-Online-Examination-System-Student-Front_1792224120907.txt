@@ -1,0 +1,435 @@
+# Project Prompt: Online Examination System — Student Frontend Only
+
+Build a clean, modern, professional, responsive **Online Examination System** focused exclusively on what students see and use.
+
+The application must provide a complete student journey: log in, view assigned examinations, read instructions, start an exam, answer questions, monitor the countdown, submit the exam, and view results.
+
+**Strict scope:** Build only the student-facing frontend. Do not build a CMS, admin dashboard, teacher dashboard, department-head dashboard, question-management interface, or backend.
+
+## 1. Design and Technology
+
+Use:
+- Next.js and TypeScript.
+- React and Tailwind CSS.
+- shadcn/ui components where appropriate.
+- Lucide icons.
+- Reusable components and a clean project structure.
+
+Design requirements:
+- Professional university examination platform.
+- Primary color: purple `#594fb6`.
+- White and light-gray backgrounds.
+- Clear typography, consistent spacing, subtle borders, and restrained shadows.
+- Responsive layouts for desktop, tablet, and mobile.
+- Accessible controls, keyboard navigation, and visible focus states.
+- Avoid unnecessary gradients, excessive animations, and cluttered dashboards.
+
+## 2. Student Login
+
+Create a dedicated login page containing:
+- Application logo and system name.
+- Student ID, username, or email field.
+- Password field with show/hide control.
+- Remember me option, if appropriate.
+- Sign In button.
+- Forgot Password link.
+- Loading, validation, and error states.
+
+Keep the login page simple and trustworthy. Do not include registration or account-management dashboards unless required for the student login experience.
+
+Use mock authentication only if a real authentication API is not available. Clearly isolate the mock logic so it can be replaced later.
+
+## 3. Student Dashboard
+
+After login, display a personalized dashboard.
+
+### Header
+- System logo and name.
+- Student name and ID.
+- Notification icon.
+- Profile menu.
+- Logout action.
+
+### Welcome section
+- Welcome message.
+- Short instruction reminding students to check their examination schedules.
+
+### Examination summary
+Display compact cards for:
+- Upcoming examinations.
+- Available examinations.
+- In-progress examinations.
+- Completed examinations.
+
+### Assigned examination list
+Each examination card must show:
+- Examination title.
+- Subject or course.
+- Duration.
+- Total marks.
+- Scheduled date and time.
+- Deadline.
+- Attempt status.
+- Action button.
+
+Use clear status badges:
+- Upcoming.
+- Available.
+- In Progress.
+- Submitted.
+- Results Available.
+- Missed.
+
+Actions must depend on the examination status:
+- Upcoming: View Details.
+- Available: Start Examination.
+- In Progress: Resume Examination.
+- Submitted: View Submission.
+- Results Available: View Result.
+- Missed: View Details.
+
+Only show assigned examinations in the student's list. Use realistic sample data for the prototype, not hardcoded data presented as live institutional records.
+
+Include useful empty states when the student has no upcoming, available, or completed examinations.
+
+## 4. Examination Details and Instructions
+
+When the student selects an examination, open a dedicated examination details page.
+
+Show:
+- Examination title.
+- Subject.
+- Duration.
+- Total marks.
+- Number of questions.
+- Scheduled start and end times.
+- Attempt limit, if applicable.
+- Examination instructions.
+- Permitted and prohibited activities.
+
+Include a short examination checklist:
+- Ensure a stable internet connection.
+- Close unnecessary applications and browser tabs.
+- Read all instructions carefully.
+- Understand the time limit and submission rules.
+
+Provide a required acknowledgment checkbox and a prominent Start Examination button when the exam is eligible.
+
+Do not allow the student to start an upcoming or expired examination.
+
+Before starting, display a confirmation dialog explaining that the countdown begins when the attempt starts.
+
+## 5. Examination-Taking Interface
+
+This is the most important screen. Make it distraction-free, intuitive, and reliable.
+
+### A. Examination header
+Display:
+- Examination title.
+- Student ID.
+- Countdown timer.
+- Answer-saving status.
+- Connection status.
+- Submit Examination button.
+
+### B. Question area
+Display one question at a time by default.
+
+Each question should contain:
+- Question number.
+- Question text.
+- Optional question image.
+- Available marks.
+- Answer options or answer input.
+
+Support these question types in the frontend:
+- Multiple choice with one correct answer.
+- Multiple select when configured.
+- True or false.
+- Short answer.
+
+Use large, comfortable answer controls and clear selected states.
+
+### C. Navigation controls
+Provide:
+- Previous Question.
+- Next Question.
+- Mark for Review.
+- Clear Answer, where appropriate.
+
+Disable Previous on the first question and Next on the last question when appropriate. Do not accidentally clear an answer when changing questions.
+
+### D. Question navigator
+Provide a question-number panel showing:
+- Current question.
+- Answered questions.
+- Unanswered questions.
+- Questions marked for review.
+
+Allow the student to jump directly to a question unless the examination explicitly uses sequential navigation.
+
+Include a compact progress indicator such as “12 of 40 questions.”
+
+### E. Full-screen experience
+When the student starts the exam:
+- Request browser full-screen mode.
+- Hide normal site navigation and unnecessary interface elements.
+- Use the available viewport efficiently.
+- Keep the question, timer, and navigation controls visible.
+- Support exiting full-screen with a clear warning and re-entry option.
+
+If full-screen mode is unavailable or denied, show an appropriate warning rather than pretending it is active.
+
+## 6. Countdown Timer
+
+Display a prominent countdown with hours, minutes, and seconds as needed.
+
+Visual behavior:
+- Normal appearance while sufficient time remains.
+- Warning appearance when five minutes remain.
+- Urgent warning when one minute remains.
+- Clear time-expired state.
+
+The timer must be derived from a fixed attempt-expiry timestamp rather than repeatedly subtracting one second.
+
+For the frontend prototype:
+- Initialize the attempt duration when an examination starts.
+- Keep the deadline stable through page refreshes using a mock attempt service.
+- Restore the remaining time when resuming an existing attempt.
+- Never reset the timer merely because the student changes questions or refreshes the page.
+- Trigger the automatic-submission flow when the timer expires.
+
+Document that production-grade deadline enforcement requires a backend. Do not claim a browser-only timer is tamper-proof.
+
+## 7. Answer Saving and Connection States
+
+Make the saving process visible and understandable.
+
+Display these states:
+- Saving answers…
+- All answers saved.
+- Connection interrupted.
+- Unable to save answers.
+- Reconnecting…
+
+For the frontend prototype:
+- Save answer changes through a centralized mock service.
+- Preserve the student's answers when navigating between questions.
+- Restore answers when resuming the same attempt.
+- Handle loading and error states.
+- Prevent stale save operations from replacing newer answers.
+
+Use local persistence only as a prototype fallback. Keep the service interface ready for a future API integration.
+
+Do not show “All answers saved” unless the mock service or actual API confirms the operation.
+
+## 8. Submission Workflow
+
+When the student clicks Submit Examination, show a confirmation dialog.
+
+Display:
+- Total questions.
+- Answered questions.
+- Unanswered questions.
+- Questions marked for review.
+- A reminder that submission is final.
+
+Provide:
+- Return to Examination.
+- Confirm Submission.
+
+After confirmation:
+1. Prevent duplicate submission clicks.
+2. Show a submitting state.
+3. Finalize the attempt through the frontend service.
+4. Display a successful submission confirmation.
+5. Show the submission reference, submission time, and examination title.
+
+If time expires, automatically initiate the submission flow without waiting for the student to confirm.
+
+The interface must handle submission failures clearly and must not falsely claim that an exam has been submitted.
+
+## 9. Submission Confirmation Page
+
+Create a dedicated success page containing:
+- Success icon.
+- “Examination Submitted Successfully” heading.
+- Examination title.
+- Student ID.
+- Submission timestamp.
+- Submission reference.
+- Result availability status.
+- Return to Dashboard button.
+
+If results have not been released, display “Your result is not yet available.”
+
+Do not expose correct answers or scores prematurely.
+
+## 10. Student Results Page
+
+Create a student-facing results page with:
+- Examination title.
+- Submission date.
+- Score and total marks.
+- Percentage.
+- Pass or fail status.
+- Correct, incorrect, and unanswered question counts, when permitted.
+- Grading status.
+- Result publication status.
+
+Provide a question-review interface only when the sample result data indicates that question review is authorized.
+
+If results are pending, show a clear pending state instead of fabricated scores.
+
+Include a history section listing previously attempted examinations and links to available results.
+
+## 11. Examination History
+
+Create a page where students can review their previous examinations.
+
+Include:
+- Examination title.
+- Subject.
+- Attempt date.
+- Duration.
+- Submission status.
+- Result status.
+- Score, when released.
+- View Details or View Result action.
+
+Provide search, status filters, and pagination or a simple load-more interaction if needed.
+
+Include useful empty states and clear loading and error states.
+
+## 12. Student Profile and Notifications
+
+Create a lightweight student profile page showing:
+- Student name.
+- Student ID.
+- Institution.
+- Department or course, when provided.
+
+Allow basic profile viewing only. Do not build administrative user-management functionality.
+
+The notification panel should display sample notifications for:
+- Newly assigned examinations.
+- Upcoming deadlines.
+- Examination submission confirmation.
+- Published results.
+
+Make notifications navigable to the relevant student-facing page.
+
+## 13. Anti-Cheating UI
+
+Implement only browser capabilities available to a frontend application.
+
+The student interface may:
+- Detect supported tab visibility changes.
+- Detect supported full-screen exit events.
+- Display warnings for monitored events.
+- Record prototype incident events.
+- Display a warning before leaving the examination page.
+- Warn before navigating away during an active attempt.
+
+Use neutral, clear messages rather than aggressive popups.
+
+Do not claim the browser can prevent screenshots, external-device use, all tab switching, or all cheating.
+
+Do not implement camera or microphone monitoring without an explicitly configured and consent-based integration.
+
+## 14. Frontend Architecture
+
+Organize the application around reusable student-facing components and pages.
+
+Suggested routes:
+
+- `/login`
+- `/dashboard`
+- `/exams`
+- `/exams/[examId]`
+- `/exams/[examId]/instructions`
+- `/exams/[examId]/attempt/[attemptId]`
+- `/exams/[examId]/submission/[attemptId]`
+- `/results`
+- `/results/[resultId]`
+- `/history`
+- `/profile`
+
+Use a centralized student-facing service layer for:
+- Authentication.
+- Assigned examinations.
+- Examination details.
+- Attempt creation and restoration.
+- Answer saving.
+- Submission.
+- Results.
+- Notifications.
+
+Use TypeScript types for examinations, questions, answers, attempts, and results.
+
+Separate mock data from UI components. Avoid putting sample examination records directly inside individual page components.
+
+Create shared components such as:
+- StudentHeader.
+- StudentSidebar or responsive navigation.
+- ExaminationCard.
+- StatusBadge.
+- CountdownTimer.
+- QuestionRenderer.
+- QuestionNavigator.
+- AnswerSaveIndicator.
+- SubmitConfirmationDialog.
+- ResultSummary.
+- EmptyState.
+- LoadingState.
+- ErrorState.
+
+## 15. Strict Scope Restrictions
+
+Do not build:
+- CMS.
+- Admin dashboard.
+- Teacher dashboard.
+- Department-head dashboard.
+- Examination creation tools.
+- Question-bank management.
+- Student assignment management.
+- Backend APIs.
+- Database migrations.
+- Server-side monitoring dashboards.
+- Institutional configuration panels.
+
+The only user role in the application interface is the student.
+
+Use mock data only where needed to demonstrate the student experience. Clearly separate simulated behavior from real functionality.
+
+## 16. Implementation Instructions
+
+First inspect the existing project and reuse its working structure where possible.
+
+Then implement the student experience in this order:
+
+1. Login and student navigation.
+2. Dashboard and assigned examination list.
+3. Examination details and instructions.
+4. Full-screen examination interface.
+5. Question navigation and answer selection.
+6. Countdown timer and answer persistence.
+7. Submission confirmation and automatic timeout submission.
+8. Results and examination history.
+9. Profile and notifications.
+10. Responsive design, accessibility, and final testing.
+
+Test the complete student journey with realistic sample data.
+
+Ensure:
+- Every visible button performs its intended frontend action.
+- Routes work correctly.
+- The countdown does not reset unexpectedly.
+- Answers survive question navigation and supported page refreshes.
+- Duplicate submissions are prevented in the prototype.
+- Expired exams cannot be resumed as active exams.
+- Loading, empty, error, and success states are present.
+- The project builds without TypeScript or lint errors.
+
+**Final objective:** Deliver a polished, student-only Online Examination System frontend that students can easily use to log in, find assigned examinations, take timed exams, save answers, submit successfully, and review their results. Keep the code clean and the mock service replaceable by a real API later.

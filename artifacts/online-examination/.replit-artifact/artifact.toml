@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Online Examination System"
+description = "A student-only university examination frontend for signing in, viewing assigned exams, taking timed assessments, submitting attempts, and reviewing released results. Uses clearly labeled mock data and browser persistence; no backend or administrative tools."
+version = "1.0.0"
+id = "artifacts/online-examination"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23127
+
+[services.development]
+run = "pnpm --filter @workspace/online-examination run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/online-examination", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/online-examination/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23127"
+BASE_PATH = "/"
