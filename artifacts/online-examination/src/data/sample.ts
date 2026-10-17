@@ -8,7 +8,7 @@ export type Notification = { id: string; title: string; detail: string; date: st
 
 const now = Date.now();
 const offset = (hours: number) => new Date(now + hours * 3600000).toISOString();
-export const student: Student = { name: 'Maya Chen', id: 'STU-204817', institution: 'Northbridge University', department: 'School of Computing', course: 'BSc Computer Science', email: 'maya.chen@northbridge.edu' };
+export const student: Student = { name: 'Maya Chen', id: 'STU-204817', institution: 'Madda Walabu University', department: 'School of Computing', course: 'BSc Computer Science', email: 'maya.chen@example.com' };
 export const examinations: Examination[] = [
   {
     id: 'cs204-midterm', title: 'Data Structures — Midterm Assessment', course: 'BSc Computer Science · Year 2', subject: 'CS204 · Data Structures', duration: 45, marks: 40, questionCount: 8,

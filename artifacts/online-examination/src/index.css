@@ -377,7 +377,7 @@
   }
 }
 
-/* Northbridge student portal: editorial academic utility with a violet signal color. */
+/* Madda Walabu University student portal: academic utility with a violet signal color. */
 :root { --violet: #594fb6; --ink: #292b3d; --muted-ink: #77798a; --line: #e5e6ed; --paper: #fff; --canvas: #f6f7fa; }
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; background: var(--canvas); color: var(--ink); font-family: var(--app-font-sans); }
