@@ -1,224 +1,362 @@
-import { useEffect, useRef, useState } from 'react';
-import { Link, Route, Switch, useLocation, useParams } from 'wouter';
-import { Bell, BookOpen, CalendarDays, Check, ChevronLeft, ChevronRight, CircleAlert, Clock3, FileCheck2, FileText, GraduationCap, History, LayoutDashboard, LogOut, Menu, ShieldCheck, UserRound, X } from 'lucide-react';
-import { examinations, notifications, student as demoStudent, type Answer, type Attempt, type Examination, type Result } from './data/sample';
-import { mockService, StorageFailure } from './data/mockService';
+import { useEffect, useState } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  Bell,
+  ChevronRight,
+  FileText,
+  FileCheck2,
+  GraduationCap,
+  History,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  ShieldCheck,
+  UserRound,
+} from 'lucide-react';
+import { Link, Route, Switch, useLocation } from 'wouter';
+import { AuthProvider, useAuth } from './lib/auth';
+import { initials } from './lib/format';
+import { useNotifications } from './lib/queries';
+import { Login } from './pages/login';
+import { Dashboard } from './pages/dashboard';
+import { ExamList } from './pages/exams';
+import { ExamDetails } from './pages/exam-details';
+import { ExamAttempt } from './pages/attempt';
+import { Submission } from './pages/submission';
+import { ResultsPage, ResultDetails } from './pages/results';
+import { HistoryPage } from './pages/history';
+import { Profile } from './pages/profile';
 import './index.css';
 
-let pendingFullscreenNotice = '';
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+      staleTime: 15_000,
+    },
+  },
+});
 
-function Button({ children, onClick, variant = 'primary', disabled = false, type = 'button', testId }: { children: React.ReactNode; onClick?: () => void; variant?: 'primary' | 'secondary' | 'quiet' | 'danger'; disabled?: boolean; type?: 'button' | 'submit'; testId: string }) {
-  return <button type={type} data-testid={testId} disabled={disabled} onClick={onClick} className={`button button-${variant}`}>{children}</button>;
+function NavLink({
+  href,
+  icon,
+  label,
+  testId,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  label: string;
+  testId?: string;
+}) {
+  const [location] = useLocation();
+  const active =
+    href === '/dashboard'
+      ? location === '/' || location === href
+      : location === href || location.startsWith(`${href}/`);
+  return (
+    <Link
+      href={href}
+      data-testid={testId ?? `link-nav-${href.slice(1)}`}
+      className={`nav-link ${active ? 'nav-active' : ''}`}
+    >
+      {icon}
+      <span>{label}</span>
+      {active && <i />}
+    </Link>
+  );
 }
-function Status({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: 'neutral' | 'green' | 'amber' | 'purple' | 'red' }) { return <span className={`status status-${tone}`}>{children}</span>; }
-function PageTitle({ eyebrow, title, detail, action }: { eyebrow?: string; title: string; detail?: string; action?: React.ReactNode }) {
-  return <div className="page-title"><div>{eyebrow && <div className="eyebrow">{eyebrow}</div>}<h1>{title}</h1>{detail && <p>{detail}</p>}</div>{action && <div className="title-action">{action}</div>}</div>;
+
+function HeaderNotifications() {
+  const [open, setOpen] = useState(false);
+  const query = useNotifications();
+  const notifications = query.data ?? [];
+
+  return (
+    <div className="header-menu-wrap">
+      <button
+        type="button"
+        className={`header-action ${open ? 'header-action-active' : ''}`}
+        aria-label="Notifications"
+        aria-expanded={open}
+        data-testid="button-notifications"
+        onClick={() => setOpen((value) => !value)}
+      >
+        <Bell size={18} />
+        {notifications.length > 0 && (
+          <span className="notification-count">{notifications.length}</span>
+        )}
+      </button>
+      {open && (
+        <div className="header-popover notification-popover">
+          <div className="popover-head">
+            <strong>Notifications</strong>
+            <small>From your examination portal</small>
+          </div>
+          {notifications.length === 0 ? (
+            <div className="popover-notification">
+              <span>
+                <strong>No notifications</strong>
+                <small>Updates about your exams will appear here.</small>
+              </span>
+            </div>
+          ) : (
+            notifications.map((note) => (
+              <div className="popover-notification" key={note.id} data-testid={`header-notification-${note.id}`}>
+                <span className="notification-dot" />
+                <span>
+                  <strong>{note.title ?? 'Notification'}</strong>
+                  <small>{note.time_ago ?? ''} · {note.message ?? ''}</small>
+                </span>
+                <ChevronRight size={15} />
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
-function dateLabel(value: string, opts: Intl.DateTimeFormatOptions = { dateStyle: 'medium', timeStyle: 'short' }) { return new Intl.DateTimeFormat('en', opts).format(new Date(value)); }
-function App() {
-  const [location, setLocation] = useLocation();
-  const [session, setSession] = useState(() => { try { return mockService.getSession(); } catch { return null; } });
-  const [storageError, setStorageError] = useState('');
+
+function HeaderProfileMenu({ onLogout }: { onLogout: () => void }) {
+  const [open, setOpen] = useState(false);
+  const { user } = useAuth();
+  const name = user?.name ?? 'Student';
+
+  return (
+    <div className="header-menu-wrap">
+      <button
+        type="button"
+        className={`profile-menu-trigger ${open ? 'header-action-active' : ''}`}
+        aria-label="Open student profile menu"
+        aria-expanded={open}
+        data-testid="button-profile-menu"
+        onClick={() => setOpen((value) => !value)}
+      >
+        <span className="topbar-avatar">{initials(name)}</span>
+        <span className="profile-trigger-name">{name.split(' ')[0]}</span>
+      </button>
+      {open && (
+        <div className="header-popover profile-popover">
+          <div className="popover-profile">
+            <span className="topbar-avatar">{initials(name)}</span>
+            <span>
+              <strong>{name}</strong>
+              <small>{user?.email ?? ''}</small>
+            </span>
+          </div>
+          <Link
+            href="/profile"
+            className="popover-link"
+            data-testid="link-header-profile"
+            onClick={() => setOpen(false)}
+          >
+            <UserRound size={16} /> Student profile
+          </Link>
+          <button
+            type="button"
+            className="popover-link"
+            data-testid="button-header-sign-out"
+            onClick={onLogout}
+          >
+            <LogOut size={16} /> Sign out
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NotFound() {
+  return (
+    <div className="not-found">
+      <div className="empty-symbol">404</div>
+      <h1>Page not found</h1>
+      <p>The page you are looking for is not available in this student portal.</p>
+      <Link href="/dashboard" className="button button-primary" data-testid="link-not-found-home">
+        Back to overview
+      </Link>
+    </div>
+  );
+}
+
+function LoadingSplash() {
+  return (
+    <div className="login-page">
+      <div className="login-form-area">
+        <div className="login-form" role="status" aria-live="polite">
+          <div className="eyebrow">STUDENT EXAMINATION PORTAL</div>
+          <h2>Restoring your session…</h2>
+          <div className="loading-block">
+            <span className="spinner" aria-hidden="true" />
+            Contacting the examination server
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PortalShell({ children }: { children: React.ReactNode }) {
+  const { user, logout } = useAuth();
+  const [location] = useLocation();
   const [mobileMenu, setMobileMenu] = useState(false);
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
-  const isAttemptRoute = /^\/exams\/[^/]+\/attempt\/[^/]+$/.test(location);
-  useEffect(() => { if (!session && location !== '/login') setLocation('/login'); if (session && location === '/login') setLocation('/dashboard'); }, [session, location, setLocation]);
-  const login = () => { try { setSession(mockService.signIn()); setStorageError(''); setLocation('/dashboard'); } catch (error) { setStorageError(error instanceof Error ? error.message : 'Sign-in could not be saved.'); } };
-  const logout = () => { try { mockService.signOut(); setSession(null); setLocation('/login'); setStorageError(''); } catch (error) { setStorageError(error instanceof Error ? error.message : 'Sign-out failed.'); } };
-  if (!session) return <Login onLogin={login} error={storageError} />;
-  if (isAttemptRoute) {
-    return <Switch>
-      <Route path="/exams/:examId/attempt/:attemptId" component={ExamAttempt} />
-      <Route component={NotFound} />
-    </Switch>;
+
+  useEffect(() => setMobileMenu(false), [location]);
+
+  const name = user?.name ?? 'Student';
+
+  return (
+    <div className="app-shell">
+      <aside className={`sidebar ${mobileMenu ? 'sidebar-open' : ''}`}>
+        <Link href="/dashboard" className="brand" data-testid="link-brand">
+          <span className="brand-mark">
+            <GraduationCap size={21} />
+          </span>
+          <span>
+            <strong>Madda Walabu</strong>
+            <small>UNIVERSITY EXAMINATIONS</small>
+          </span>
+        </Link>
+        <div className="nav-caption">STUDENT SPACE</div>
+        <nav className="main-nav" aria-label="Student navigation">
+          <NavLink href="/dashboard" icon={<LayoutDashboard size={18} />} label="Overview" />
+          <NavLink href="/exams" icon={<FileText size={18} />} label="My examinations" />
+          <NavLink href="/results" icon={<FileCheck2 size={18} />} label="Results" />
+          <NavLink href="/history" icon={<History size={18} />} label="Attempt history" />
+          <NavLink href="/profile" icon={<UserRound size={18} />} label="My profile" />
+        </nav>
+        <div className="sidebar-spacer" />
+        <div className="prototype-note">
+          <ShieldCheck size={16} />
+          <span>
+            Secure examination portal
+            <br />
+            <small>Server-enforced timers &amp; grading</small>
+          </span>
+        </div>
+        <div className="sidebar-student">
+          <div className="avatar">{initials(name)}</div>
+          <div className="student-identity">
+            <strong>{name}</strong>
+            <small>{user?.email ?? ''}</small>
+          </div>
+          <button
+            type="button"
+            className="icon-button logout"
+            aria-label="Sign out"
+            data-testid="button-sign-out"
+            onClick={() => void logout()}
+          >
+            <LogOut size={17} />
+          </button>
+        </div>
+      </aside>
+
+      {mobileMenu && (
+        <button
+          type="button"
+          className="mobile-scrim"
+          aria-label="Close navigation"
+          onClick={() => setMobileMenu(false)}
+        />
+      )}
+
+      <main className="main-area">
+        <header className="topbar">
+          <button
+            type="button"
+            className="icon-button mobile-toggle"
+            aria-label="Open navigation"
+            data-testid="button-open-menu"
+            onClick={() => setMobileMenu((value) => !value)}
+          >
+            <Menu size={20} />
+          </button>
+          <div className="crumb">
+            Student portal <span>/</span>{' '}
+            <b>{location.split('/')[1]?.replace('-', ' ') || 'overview'}</b>
+          </div>
+          <div className="topbar-right">
+            <span className="prototype-pill">
+              <i /> LIVE API
+            </span>
+            <HeaderNotifications />
+            <HeaderProfileMenu onLogout={() => void logout()} />
+          </div>
+        </header>
+
+        <div className="content-area">{children}</div>
+
+        <footer className="footer">
+          <span>Madda Walabu University · Student examination portal</span>
+          <span>Powered by the Ofijan examination server</span>
+        </footer>
+      </main>
+    </div>
+  );
+}
+
+function RouterRoot() {
+  const { status } = useAuth();
+  const [location, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (status === 'anonymous' && location !== '/login') setLocation('/login');
+    if (status === 'authenticated' && location === '/login') setLocation('/dashboard');
+  }, [status, location, setLocation]);
+
+  if (status === 'loading') return <LoadingSplash />;
+
+  if (status === 'anonymous') {
+    return (
+      <Switch>
+        <Route path="/login" component={Login} />
+        <Route>
+          <Login />
+        </Route>
+      </Switch>
+    );
   }
-  return <div className="app-shell">
-    <aside className={`sidebar ${mobileMenu ? 'sidebar-open' : ''}`}>
-      <Link href="/dashboard" className="brand" data-testid="link-brand"><span className="brand-mark"><GraduationCap size={21} /></span><span><strong>Madda Walabu</strong><small>UNIVERSITY EXAMINATIONS</small></span></Link>
-      <div className="nav-caption">STUDENT SPACE</div>
-      <nav className="main-nav" aria-label="Student navigation">
-        <NavLink href="/dashboard" icon={<LayoutDashboard size={18} />} label="Overview" />
-        <NavLink href="/exams" icon={<FileText size={18} />} label="My examinations" />
-        <NavLink href="/results" icon={<FileCheck2 size={18} />} label="Results" />
-        <NavLink href="/history" icon={<History size={18} />} label="Attempt history" />
-        <NavLink href="/profile" icon={<UserRound size={18} />} label="My profile" />
-      </nav>
-      <div className="sidebar-spacer" />
-      <div className="prototype-note"><ShieldCheck size={16} /><span>Prototype portal<br /><small>Demo data · browser storage</small></span></div>
-      <div className="sidebar-student"><div className="avatar">{session.name.split(' ').map(part => part[0]).join('')}</div><div className="student-identity"><strong>{session.name}</strong><small>{session.id}</small></div><button className="icon-button logout" aria-label="Sign out" data-testid="button-sign-out" onClick={logout}><LogOut size={17} /></button></div>
-    </aside>
-    {mobileMenu && <button className="mobile-scrim" aria-label="Close navigation" onClick={() => setMobileMenu(false)} />}
-    <main className="main-area">
-      <header className="topbar"><button className="icon-button mobile-toggle" aria-label="Open navigation" data-testid="button-open-menu" onClick={() => setMobileMenu(!mobileMenu)}><Menu size={20} /></button><div className="crumb">Student portal <span>/</span> <b>{location.split('/')[1]?.replace('-', ' ') || 'overview'}</b></div><div className="topbar-right"><span className="prototype-pill"><i /> DEMO ENVIRONMENT</span><div className="header-menu-wrap"><button className={`header-action ${notificationsOpen ? 'header-action-active' : ''}`} aria-label="Notifications" aria-expanded={notificationsOpen} data-testid="button-notifications" onClick={() => { setNotificationsOpen(!notificationsOpen); setProfileOpen(false); }}><Bell size={18} /><span className="notification-count">{notifications.length}</span></button>{notificationsOpen && <div className="header-popover notification-popover"><div className="popover-head"><strong>Notifications</strong><small>Simulated portal updates</small></div>{notifications.map(note => <Link href={note.href} key={note.id} className="popover-notification" data-testid={`header-notification-${note.id}`} onClick={() => setNotificationsOpen(false)}><span className="notification-dot" /><span><strong>{note.title}</strong><small>{note.detail}</small></span><ChevronRight size={15} /></Link>)}</div>}</div><div className="header-menu-wrap"><button className={`profile-menu-trigger ${profileOpen ? 'header-action-active' : ''}`} aria-label="Open student profile menu" aria-expanded={profileOpen} data-testid="button-profile-menu" onClick={() => { setProfileOpen(!profileOpen); setNotificationsOpen(false); }}><span className="topbar-avatar">{session.name.split(' ').map(part => part[0]).join('')}</span><span className="profile-trigger-name">{session.name.split(' ')[0]}</span></button>{profileOpen && <div className="header-popover profile-popover"><div className="popover-profile"><span className="topbar-avatar">{session.name.split(' ').map(part => part[0]).join('')}</span><span><strong>{session.name}</strong><small>{session.id}</small></span></div><Link href="/profile" className="popover-link" data-testid="link-header-profile" onClick={() => setProfileOpen(false)}><UserRound size={16} /> Student profile</Link><button className="popover-link" data-testid="button-header-sign-out" onClick={logout}><LogOut size={16} /> Sign out</button></div>}</div></div></header>
-      {storageError && <div className="global-error" role="alert"><CircleAlert size={17} />{storageError}<button aria-label="Dismiss error" data-testid="button-dismiss-error" onClick={() => setStorageError('')}><X size={15} /></button></div>}
-      <div className="content-area"><Switch>
+
+  const isAttemptRoute = /^\/exams\/[^/]+\/attempt\/[^/]+$/.test(location);
+  if (isAttemptRoute) {
+    return (
+      <Switch>
+        <Route path="/exams/:examId/attempt/:attemptId" component={ExamAttempt} />
+        <Route component={NotFound} />
+      </Switch>
+    );
+  }
+
+  return (
+    <PortalShell>
+      <Switch>
         <Route path="/" component={Dashboard} />
         <Route path="/dashboard" component={Dashboard} />
+        <Route path="/login" component={Login} />
         <Route path="/exams" component={ExamList} />
-        <Route path="/exams/:examId" component={ExamDetails} />
         <Route path="/exams/:examId/attempt/:attemptId" component={ExamAttempt} />
         <Route path="/exams/:examId/submission/:attemptId" component={Submission} />
+        <Route path="/exams/:examId" component={ExamDetails} />
         <Route path="/results" component={ResultsPage} />
-        <Route path="/results/:resultId" component={ResultDetails} />
+        <Route path="/results/:attemptId" component={ResultDetails} />
         <Route path="/history" component={HistoryPage} />
         <Route path="/profile" component={Profile} />
         <Route component={NotFound} />
-      </Switch></div>
-      <footer className="footer"><span>Madda Walabu University · Student examination portal</span><span>Prototype interface · Assessment records are simulated</span></footer>
-    </main>
-  </div>;
+      </Switch>
+    </PortalShell>
+  );
 }
-function NavLink({ href, icon, label }: { href: string; icon: React.ReactNode; label: string }) {
-  const [location] = useLocation(); const active = href === '/dashboard' ? location === '/' || location === href : location === href || location.startsWith(`${href}/`);
-  return <Link href={href} data-testid={`link-nav-${href.slice(1)}`} className={`nav-link ${active ? 'nav-active' : ''}`}>{icon}<span>{label}</span>{active && <i />}</Link>;
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <RouterRoot />
+      </AuthProvider>
+    </QueryClientProvider>
+  );
 }
-function Login({ onLogin, error }: { onLogin: () => void; error: string }) {
-  const [studentId, setStudentId] = useState('STU-204817'); const [password, setPassword] = useState('mwu-demo');
-  const [showPassword, setShowPassword] = useState(false); const [forgotNotice, setForgotNotice] = useState(false);
-  return <div className="login-page"><div className="login-side"><div className="login-brand"><span className="brand-mark"><GraduationCap size={22} /></span><span><strong>Madda Walabu</strong><small>UNIVERSITY EXAMINATIONS</small></span></div><div className="login-copy"><div className="eyebrow">STUDENT EXAMINATION PORTAL</div><h1>Exams, with<br /><em>clarity.</em></h1><p>Your schedule, assessments and outcomes in one secure student space.</p><div className="login-assurance"><ShieldCheck size={18} /><span>Student access only<br /><small>For this prototype, sign-in is simulated.</small></span></div></div><div className="login-footer">MADDA WALABU UNIVERSITY <span>·</span> ONLINE EXAMINATIONS</div></div><div className="login-form-area"><form className="login-form" onSubmit={event => { event.preventDefault(); onLogin(); }}><div className="eyebrow">WELCOME BACK</div><h2>Sign in to continue</h2><p>Use the prefilled demo student account.</p><label htmlFor="login-id">Student ID</label><input id="login-id" data-testid="input-student-id" value={studentId} onChange={e => setStudentId(e.target.value)} autoComplete="username" required /><label htmlFor="login-password">Password</label><div className="password-field"><input id="login-password" data-testid="input-password" type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" required /><button type="button" className="password-toggle" data-testid="button-toggle-password" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? 'Hide' : 'Show'}</button></div><div className="login-links login-links-end"><button type="button" className="forgot-button" data-testid="button-forgot-password" onClick={() => setForgotNotice(!forgotNotice)}>Forgot password?</button></div>{forgotNotice && <div className="forgot-notice" role="status">Password recovery is not available in this prototype. Contact your institution's support team.</div>}<div className="demo-hint"><CircleAlert size={16} /><span>Demo sign-in only. Credentials are not verified by a server.</span></div>{error && <div className="error-box" role="alert">{error}</div>}<Button type="submit" testId="button-login">Continue to portal <ChevronRight size={17} /></Button><div className="login-legal">By continuing, you are entering a simulated student experience.</div></form></div></div>;
-}
-function Dashboard() {
-  const attempts = safeAttempts(); const results = safeResults(); const states = examinations.map(exam => ({ exam, state: getStudentExamState(exam, attempts, results) }));
-  const count = (state: ExamStudentState) => states.filter(item => item.state === state).length;
-  const completedCount = count('Submitted') + count('Results Available');
-  const nextExam = states.filter(item => item.state === 'Available' || item.state === 'In Progress' || item.state === 'Upcoming').sort((a, b) => Date.parse(a.exam.scheduledStart) - Date.parse(b.exam.scheduledStart))[0];
-  const schedule = states.filter(item => item.state === 'Upcoming' || item.state === 'Available' || item.state === 'In Progress').sort((a, b) => Date.parse(a.exam.scheduledStart) - Date.parse(b.exam.scheduledStart)).slice(0, 4);
-  return <><PageTitle eyebrow="STUDENT OVERVIEW" title={`Good morning, ${demoStudent.name.split(' ')[0]}`} detail="Your assessment activity at a glance." />{nextExam ? <section className="welcome-strip"><div className="welcome-icon"><CalendarDays size={22} /></div><div><span className="strip-kicker">YOUR NEXT ASSESSMENT</span><strong>{nextExam.exam.title}</strong><span>{nextExam.state === 'Available' ? `Available now · Closes ${dateLabel(nextExam.exam.deadline, { dateStyle: 'medium', timeStyle: 'short' })}` : nextExam.state === 'In Progress' ? 'Attempt in progress · Resume when ready' : `Scheduled for ${dateLabel(nextExam.exam.scheduledStart, { dateStyle: 'medium', timeStyle: 'short' })}`}</span></div><Link href={`/exams/${nextExam.exam.id}`} data-testid="link-next-exam" className="button button-light">{nextExam.state === 'In Progress' ? 'Resume assessment' : 'View assessment'} <ChevronRight size={16} /></Link></section> : <section className="dashboard-empty"><CalendarDays size={22} /><div><strong>No upcoming assessments</strong><span>Your assigned exam schedule is clear for now.</span></div><Link href="/exams" className="text-link" data-testid="link-empty-exams">View all assessments <ChevronRight size={15} /></Link></section>}<div className="stat-grid"><Stat icon={<CalendarDays size={18} />} label="Upcoming" value={String(count('Upcoming')).padStart(2, '0')} note="Scheduled to open later" /><Stat icon={<FileText size={18} />} label="Available" value={String(count('Available')).padStart(2, '0')} note="Ready to begin" /><Stat icon={<Clock3 size={18} />} label="In progress" value={String(count('In Progress')).padStart(2, '0')} note="Attempts currently underway" /><Stat icon={<Check size={18} />} label="Completed / submitted" value={String(completedCount).padStart(2, '0')} note="Submitted or released" /></div><div className="dashboard-columns"><section className="panel upcoming-panel"><div className="section-head"><div><div className="eyebrow">ASSESSMENT SCHEDULE</div><h2>Coming up</h2></div><Link href="/exams" className="text-link" data-testid="link-all-exams">All assessments <ChevronRight size={15} /></Link></div>{schedule.length ? schedule.map(({ exam }) => <ExamRow exam={exam} key={exam.id} />) : <EmptyState icon={<CalendarDays size={22} />} title="Nothing scheduled" description="There are no upcoming or active assessments right now." />}</section><section className="panel notifications-panel"><div className="section-head"><div><div className="eyebrow">PORTAL UPDATES</div><h2>Notifications</h2></div><Bell size={18} className="subtle-icon" /></div><div className="notification-list">{notifications.map(note => <Link href={note.href} key={note.id} className="notification-row" data-testid={`link-notification-${note.id}`}><span className="notification-dot" /><span><strong>{note.title}</strong><small>{note.detail}</small></span><ChevronRight size={15} /></Link>)}</div><div className="notification-note">Notifications are sample items in this prototype.</div></section></div><div className="bottom-note"><ShieldCheck size={17} /><span><strong>Assessment integrity</strong> — Attempts are stored in this browser. Browser-only controls cannot prevent all interruptions or guarantee deadline enforcement.</span></div></>;
-}
-function safeAttempts(): Attempt[] { try { return mockService.getAttempts(); } catch { return []; } }
-function safeResults(): Result[] { try { return mockService.getResults(); } catch { return []; } }
-function storageUnavailable(): boolean { try { mockService.getAttempts(); mockService.getResults(); return false; } catch { return true; } }
-type ExamStudentState = 'Upcoming' | 'Available' | 'In Progress' | 'Submitted' | 'Results Available' | 'Missed';
-function getStudentExamState(exam: Examination, attempts = safeAttempts(), results = safeResults()): ExamStudentState {
-  if (results.some(result => result.examId === exam.id && result.releaseStatus === 'released')) return 'Results Available';
-  const attempt = attempts.filter(item => item.examId === exam.id).sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
-  if (attempt?.state === 'submitted') return 'Submitted';
-  const now = Date.now(); const start = Date.parse(exam.scheduledStart); const end = Date.parse(exam.scheduledEnd);
-  if (attempt?.state === 'in-progress') {
-    if (now < Date.parse(attempt.expiresAt) && now <= end && now <= Date.parse(exam.deadline)) return 'In Progress';
-    return 'Submitted';
-  }
-  if (now < start || exam.status === 'upcoming') return 'Upcoming';
-  if (now > end || now > Date.parse(exam.deadline) || exam.status === 'closed') return 'Missed';
-  if (exam.status === 'open') return 'Available';
-  return 'Upcoming';
-}
-function stateTone(state: ExamStudentState): 'green' | 'purple' | 'amber' | 'neutral' | 'red' {
-  if (state === 'Available' || state === 'Results Available') return 'green';
-  if (state === 'In Progress') return 'amber';
-  if (state === 'Upcoming') return 'purple';
-  if (state === 'Missed') return 'red';
-  return 'neutral';
-}
-function Stat({ icon, label, value, note }: { icon: React.ReactNode; label: string; value: string; note: string }) { return <div className="stat-card"><div className="stat-top"><span className="stat-icon">{icon}</span><span>{label}</span></div><strong>{value}</strong><small>{note}</small></div>; }
-function ExamRow({ exam }: { exam: Examination }) { const state = getStudentExamState(exam); return <div className="exam-row"><div className="exam-date"><CalendarDays size={17} /><span>{dateLabel(exam.scheduledStart, { month: 'short', day: '2-digit' })}</span></div><div className="exam-row-main"><strong>{exam.title}</strong><span>{exam.subject} <i /> {exam.duration} minutes</span></div><Status tone={stateTone(state)}>{state}</Status><Link href={`/exams/${exam.id}`} className="row-arrow" aria-label={`View ${exam.title}`} data-testid={`link-exam-${exam.id}`}><ChevronRight size={18} /></Link></div>; }
-function ExamList() { return <><PageTitle eyebrow="ASSESSMENTS" title="My examinations" detail="Assessments assigned to your current course." /><div className="filter-bar"><span><FileText size={17} /> {examinations.length} assigned assessments</span><span className="prototype-tag">SIMULATED SCHEDULE</span></div><div className="exam-cards">{examinations.map(exam => <ExamCard exam={exam} key={exam.id} />)}</div><div className="bottom-note"><CircleAlert size={17} /><span>Exam times and assignment records shown here are demonstration data, not institutional records.</span></div></>; }
-function ExamCard({ exam }: { exam: Examination }) {
-  const state = getStudentExamState(exam);
-  const label = state === 'In Progress' ? 'Resume assessment' : state === 'Available' ? 'View instructions' : state === 'Submitted' || state === 'Results Available' ? 'View outcome' : 'View details';
-  return <article className="exam-card"><div className="exam-card-head"><div className="course-icon"><BookOpen size={19} /></div><Status tone={stateTone(state)}>{state}</Status></div><div className="eyebrow">{exam.subject}</div><h2>{exam.title}</h2><p>{exam.course}</p><div className="exam-card-meta"><span><Clock3 size={15} />{exam.duration} min</span><span><FileCheck2 size={15} />{exam.marks} marks</span><span><CalendarDays size={15} />{dateLabel(exam.scheduledStart, { month: 'short', day: 'numeric' })}</span></div><div className="exam-card-foot"><span>{state === 'Available' || state === 'In Progress' ? `Ends ${dateLabel(exam.scheduledEnd, { dateStyle: 'medium', timeStyle: 'short' })}` : state === 'Upcoming' ? `Starts ${dateLabel(exam.scheduledStart, { dateStyle: 'medium', timeStyle: 'short' })}` : state === 'Missed' ? 'Assessment window has ended' : state}</span><Link href={state === 'Results Available' ? `/results/${safeResults().find(r => r.examId === exam.id && r.releaseStatus === 'released')?.id}` : `/exams/${exam.id}`} className="text-link" data-testid={`link-open-exam-${exam.id}`}>{label} <ChevronRight size={16} /></Link></div></article>;
-}
-function ExamDetails() {
-  const { examId = '' } = useParams(); const exam = examinations.find(item => item.id === examId); const [, setLocation] = useLocation(); const [ack, setAck] = useState(false); const [error, setError] = useState(''); const [confirmStart, setConfirmStart] = useState(false);
-  if (!exam) return <NotFound />;
-  const attempts = safeAttempts(); const results = safeResults(); const attempt = attempts.filter(item => item.examId === exam.id).sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0]; const studentState = getStudentExamState(exam, attempts, results); const now = Date.now(); const withinWindow = now >= Date.parse(exam.scheduledStart) && now <= Date.parse(exam.scheduledEnd) && now <= Date.parse(exam.deadline); const canStart = exam.status === 'open' && withinWindow && attempt?.state !== 'submitted';
-  const navigateToAttempt = async (existing?: Attempt) => {
-    if (existing) {
-      pendingFullscreenNotice = await requestFullscreenForAttempt();
-      setLocation(`/exams/${exam.id}/attempt/${existing.id}`);
-      return;
-    }
-    setConfirmStart(true);
-  };
-  const confirmAndStart = async () => {
-    try {
-      const created = mockService.begin(exam.id);
-      pendingFullscreenNotice = await requestFullscreenForAttempt();
-      setConfirmStart(false);
-      setLocation(`/exams/${exam.id}/attempt/${created.id}`);
-    } catch (e) { setError(e instanceof Error ? e.message : 'Could not start assessment.'); pendingFullscreenNotice = ''; }
-  };
-  return <><div className="back-row"><Link href="/exams" className="text-link" data-testid="link-back-exams"><ChevronLeft size={16} /> My examinations</Link><Status tone={stateTone(studentState)}>{studentState}</Status></div><div className="detail-layout"><section className="detail-main"><div className="eyebrow">{exam.subject}</div><h1 className="detail-title">{exam.title}</h1><p className="detail-course">{exam.course}</p><div className="detail-metrics"><Metric label="DURATION" value={`${exam.duration} min`} /><Metric label="TOTAL MARKS" value={String(exam.marks)} /><Metric label="QUESTIONS" value={String(exam.questionCount)} /><Metric label="ATTEMPTS" value={`1 of ${exam.attemptLimit}`} /></div><div className="panel instruction-panel"><div className="panel-title"><div className="eyebrow">BEFORE YOU BEGIN</div><h2>Instructions</h2></div><ol>{exam.instructions.map((item, index) => <li key={item}><span>{String(index + 1).padStart(2, '0')}</span>{item}</li>)}</ol><div className="activity-policy"><strong>Permitted activities</strong><span>Use blank paper and a pen for working out your answers.</span><strong>Prohibited activities</strong><span>Do not collaborate, use messaging, browse external websites, or use unapproved devices during the assessment.</span></div></div>{error && <div className="error-box" role="alert">{error}</div>}{attempt?.state === 'submitted' ? <div className="inline-success"><Check size={18} />This assessment has already been submitted. <Link href={`/exams/${exam.id}/submission/${attempt.id}`}>View confirmation</Link></div> : <label className="ack-check"><input type="checkbox" data-testid="checkbox-acknowledge" checked={ack} onChange={e => setAck(e.target.checked)} /><span>I have read and understood the instructions above.</span></label>}</section><aside className="panel details-aside"><div className="eyebrow">ASSESSMENT WINDOW</div><h2>Plan your time</h2><div className="window-item"><CalendarDays size={17} /><span><small>Scheduled start</small><strong>{dateLabel(exam.scheduledStart)}</strong></span></div><div className="window-item"><Clock3 size={17} /><span><small>Scheduled end</small><strong>{dateLabel(exam.scheduledEnd)}</strong></span></div><div className="window-item"><Clock3 size={17} /><span><small>Submission deadline</small><strong>{dateLabel(exam.deadline)}</strong></span></div><div className="aside-rule" /><p className="aside-warning"><CircleAlert size={17} />The timer starts once you begin and continues if you leave this page.</p><Button onClick={() => void navigateToAttempt(studentState === 'In Progress' && attempt?.state === 'in-progress' ? attempt : undefined)} disabled={!canStart || !ack} testId="button-start-exam">{studentState === 'In Progress' ? 'Resume assessment' : studentState === 'Upcoming' ? 'Not yet available' : studentState === 'Missed' ? 'Assessment missed' : studentState === 'Submitted' || studentState === 'Results Available' ? 'Attempt submitted' : 'Start assessment'} <ChevronRight size={17} /></Button>{!ack && canStart && <small className="button-hint">Acknowledge the instructions to continue.</small>}{!withinWindow && <small className="button-hint">{now < Date.parse(exam.scheduledStart) ? 'This assessment is not yet available.' : 'The scheduled assessment window has ended.'}</small>}</aside></div>{confirmStart && <div className="modal-backdrop"><section className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="start-title"><div className="modal-icon"><Clock3 size={20} /></div><button className="modal-close" aria-label="Cancel starting" data-testid="button-cancel-start" onClick={() => setConfirmStart(false)}><X size={18} /></button><div className="eyebrow">READY TO BEGIN?</div><h2 id="start-title">Start this assessment?</h2><p>Your {exam.duration}-minute countdown begins immediately when you confirm. The timer continues if you leave this page.</p><div className="prototype-disclaimer"><CircleAlert size={16} />Fullscreen is optional. If this browser blocks it, you can continue with a notice.</div><div className="modal-actions"><Button variant="secondary" onClick={() => setConfirmStart(false)} testId="button-cancel-start-action">Not yet</Button><Button onClick={() => void confirmAndStart()} testId="button-confirm-start">Confirm and begin</Button></div></section></div>}</>;
-}
-async function requestFullscreenForAttempt(): Promise<string> {
-  if (!document.fullscreenElement) {
-    try { await document.documentElement.requestFullscreen(); return ''; }
-    catch { return 'Fullscreen could not be enabled in this browser. Your timed assessment continues in this window.'; }
-  }
-  return '';
-}
-function Metric({ label, value }: { label: string; value: string }) { return <div><small>{label}</small><strong>{value}</strong></div>; }
-function ExamAttempt() {
-  const { examId = '', attemptId = '' } = useParams(); const exam = examinations.find(e => e.id === examId); const [attempt, setAttempt] = useState<Attempt | null>(() => { try { return mockService.getAttempts().find(a => a.id === attemptId) ?? null; } catch { return null; } });
-  const [current, setCurrent] = useState(0); const [saveState, setSaveState] = useState<'saved' | 'saving' | 'error'>('saved'); const [error, setError] = useState(''); const [clock, setClock] = useState(Date.now()); const [confirmSubmit, setConfirmSubmit] = useState(false); const [fullscreenWarning, setFullscreenWarning] = useState(() => { const message = pendingFullscreenNotice; pendingFullscreenNotice = ''; return message; }); const [isFullscreen, setIsFullscreen] = useState(() => Boolean(document.fullscreenElement)); const expiryTriggered = useRef(false); const [, setLocation] = useLocation();
-  useEffect(() => { const t = window.setInterval(() => setClock(Date.now()), 1000); return () => window.clearInterval(t); }, []);
-  useEffect(() => {
-    const visibility = () => { if (document.hidden) setFullscreenWarning('This page is no longer visible. Your timed assessment continues.'); };
-    const fs = () => { const active = Boolean(document.fullscreenElement); setIsFullscreen(active); if (!active) setFullscreenWarning('Fullscreen has ended. Re-enter fullscreen if you would like to continue in that mode; the timer continues.'); else setFullscreenWarning('Fullscreen is active. You may exit it at any time; the timer continues.'); };
-    document.addEventListener('visibilitychange', visibility); document.addEventListener('fullscreenchange', fs);
-    return () => { document.removeEventListener('visibilitychange', visibility); document.removeEventListener('fullscreenchange', fs); };
-  }, []);
-  useEffect(() => { if (!attempt || attempt.state !== 'in-progress') return; const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; }; window.addEventListener('beforeunload', warn); return () => window.removeEventListener('beforeunload', warn); }, [attempt]);
-  useEffect(() => { if (attempt && attempt.state === 'in-progress' && clock >= Date.parse(attempt.expiresAt) && !expiryTriggered.current) { expiryTriggered.current = true; void submit(); } }, [clock, attempt]);
-  if (!exam || !attempt || attempt.examId !== exam.id) return <><PageTitle title="Assessment unavailable" detail="This attempt could not be loaded from browser storage." /><Link href={`/exams/${examId}`} className="text-link">Return to assessment details</Link></>;
-  if (attempt.state === 'submitted') return <><PageTitle eyebrow="ATTEMPT FINALIZED" title="This attempt is already submitted" detail="A submitted attempt cannot be resumed or changed." /><Link href={`/exams/${exam.id}/submission/${attempt.id}`} className="button button-primary" data-testid="link-finalized-submission">View submission confirmation <ChevronRight size={16} /></Link></>;
-  const question = exam.questions[current]; const remaining = Math.max(0, Math.floor((Date.parse(attempt.expiresAt) - clock) / 1000)); const answered = Object.values(attempt.answers).filter(a => Array.isArray(a) ? a.length : String(a).trim()).length;
-  function updateAnswer(value: Answer) { if (!attempt || !question) return; const next = { ...attempt, answers: { ...attempt.answers, [question.id]: value } }; setAttempt(next); setSaveState('saving'); setError(''); try { mockService.saveAttempt(next); setSaveState('saved'); } catch (e) { setSaveState('error'); setError(e instanceof Error ? e.message : 'Answer could not be saved.'); } }
-  function toggleReview() { if (!attempt || !question) return; const review = attempt.review.includes(question.id) ? attempt.review.filter(id => id !== question.id) : [...attempt.review, question.id]; const next = { ...attempt, review }; setAttempt(next); try { mockService.saveAttempt(next); setSaveState('saved'); } catch (e) { setSaveState('error'); setError(e instanceof Error ? e.message : 'Review mark could not be saved.'); } }
-  async function fullscreen() { try { if (!document.fullscreenElement) { await document.documentElement.requestFullscreen(); setIsFullscreen(true); setFullscreenWarning('Fullscreen is active. You may exit it at any time; the timer continues.'); } else { await document.exitFullscreen(); setIsFullscreen(false); } } catch { setFullscreenWarning('Fullscreen could not be enabled in this browser. Your assessment remains available.'); } }
-  async function submit() {
-    if (!attempt || attempt.state === 'submitted') return;
-    setSaveState('saving'); setError('');
-    try { const done = mockService.submit(attempt); if (!done.reference) throw new StorageFailure('Submission could not be confirmed in browser storage. Keep this page open and retry.'); setAttempt(done); setLocation(`/exams/${examId}/submission/${done.id}`); }
-    catch (e) { setSaveState('error'); setError(e instanceof Error ? e.message : 'Submission could not be confirmed.'); setConfirmSubmit(true); }
-  }
-  return <div className="attempt-page"><header className="attempt-top"><Link href={`/exams/${exam.id}`} className="attempt-brand" data-testid="link-attempt-back"><span className="brand-mark"><GraduationCap size={19} /></span><span><strong>Madda Walabu</strong><small>{exam.subject}</small></span></Link><div className={`timer ${remaining <= 60 ? 'timer-urgent' : remaining <= 300 ? 'timer-warning' : ''}`} data-testid="value-countdown"><Clock3 size={18} /><span><small>TIME REMAINING</small><strong>{String(Math.floor(remaining / 3600)).padStart(2, '0')}:{String(Math.floor(remaining % 3600 / 60)).padStart(2, '0')}:{String(remaining % 60).padStart(2, '0')}</strong></span></div><div className="save-status" data-testid="status-save">{saveState === 'saved' ? <><Check size={15} /> Saved in this browser</> : saveState === 'saving' ? <><span className="save-dot" /> Saving…</> : <><CircleAlert size={15} /> Not saved</>}</div><Button variant="secondary" onClick={fullscreen} testId="button-fullscreen">{isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}</Button></header>
-    {fullscreenWarning && <div className="exam-alert" role="status"><CircleAlert size={17} /><span>{fullscreenWarning}</span><button onClick={() => setFullscreenWarning('')} aria-label="Dismiss notice" data-testid="button-dismiss-notice"><X size={16} /></button></div>}
-    {error && <div className="exam-alert alert-error" role="alert"><CircleAlert size={17} /><span>{error}</span>{error.toLowerCase().includes('submission') && <button className="retry-submit" data-testid="button-retry-submit" onClick={() => void submit()}>Retry submission</button>}</div>}
-    <div className="attempt-body"><aside className="question-nav panel"><div className="eyebrow">QUESTION NAVIGATION</div><div className="question-nav-summary"><strong>{answered} of {exam.questionCount}</strong><span>answered</span></div><div className="progress-track"><i style={{ width: `${answered / exam.questionCount * 100}%` }} /></div><div className="question-grid">{exam.questions.map((q, i) => <button key={q.id} data-testid={`button-question-${i + 1}`} aria-label={`Go to question ${i + 1}${attempt.review.includes(q.id) ? ', marked for review' : ''}`} onClick={() => setCurrent(i)} className={`question-number ${i === current ? 'question-current' : ''} ${attempt.answers[q.id] ? 'question-answered' : ''} ${attempt.review.includes(q.id) ? 'question-review' : ''}`}>{i + 1}</button>)}</div><div className="legend"><span><i className="legend-answer" />Answered</span><span><i className="legend-review" />Review</span><span><i className="legend-current" />Current</span></div><div className="nav-help">Assessment progress is stored locally in this browser. Avoid closing the browser before you submit.</div></aside>
-      <section className="question-stage"><div className="question-stage-head"><span>QUESTION {String(current + 1).padStart(2, '0')} <i>OF</i> {exam.questionCount}</span><span className="marks-label">{question.marks} marks</span></div><div className="question-content"><div className="question-type">{question.type === 'multiple' ? 'SELECT ALL THAT APPLY' : question.type === 'short' ? 'SHORT ANSWER' : question.type === 'boolean' ? 'TRUE OR FALSE' : 'SELECT ONE'}</div><h1>{question.text}</h1><AnswerField question={question} value={attempt.answers[question.id]} onChange={updateAnswer} /><button className={`review-toggle ${attempt.review.includes(question.id) ? 'review-on' : ''}`} onClick={toggleReview} data-testid="button-mark-review">{attempt.review.includes(question.id) ? <Check size={16} /> : <span className="review-flag" />} {attempt.review.includes(question.id) ? 'Marked for review' : 'Mark for review'}</button></div><div className="question-controls"><Button variant="secondary" onClick={() => setCurrent(Math.max(0, current - 1))} disabled={current === 0} testId="button-previous"><ChevronLeft size={17} /> Previous</Button><button className="clear-answer" data-testid="button-clear-answer" onClick={() => updateAnswer(question.type === 'multiple' ? [] : '')} disabled={!attempt.answers[question.id]}>Clear answer</button>{current < exam.questions.length - 1 ? <Button onClick={() => setCurrent(current + 1)} testId="button-next">Next question <ChevronRight size={17} /></Button> : <Button onClick={() => setConfirmSubmit(true)} testId="button-review-submit">Review and submit <ChevronRight size={17} /></Button>}</div></section></div>
-    {confirmSubmit && <div className="modal-backdrop"><section className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="submit-title"><div className="modal-icon"><FileCheck2 size={20} /></div><button className="modal-close" aria-label="Close dialog" data-testid="button-close-submit-dialog" onClick={() => setConfirmSubmit(false)}><X size={18} /></button><div className="eyebrow">FINAL CHECK</div><h2 id="submit-title">Submit this assessment?</h2><p>Your attempt will be recorded with the answers currently saved in this browser. You cannot change answers after submission.</p><div className="submit-summary"><span>Answered <strong>{answered} of {exam.questionCount}</strong></span><span>Unanswered <strong>{exam.questionCount - answered}</strong></span><span>Marked for review <strong>{attempt.review.length}</strong></span></div>{error && <div className="error-box">{error}</div>}<div className="modal-actions"><Button variant="secondary" onClick={() => setConfirmSubmit(false)} testId="button-keep-working">Keep working</Button><Button onClick={() => void submit()} testId="button-confirm-submit">Confirm submission</Button></div><small className="modal-caveat">Browser storage is prototype persistence and does not provide tamper-proof deadline enforcement.</small></section></div>}</div>;
-}
-function AnswerField({ question, value, onChange }: { question: Examination['questions'][number]; value?: Answer; onChange: (answer: Answer) => void }) {
-  if (question.type === 'short') return <div className="short-answer"><textarea aria-label="Your answer" data-testid={`input-answer-${question.id}`} value={typeof value === 'string' ? value : ''} onChange={e => onChange(e.target.value)} placeholder="Write your answer here…" maxLength={500} /><div>{typeof value === 'string' ? value.length : 0} / 500 characters</div></div>;
-  const options = question.type === 'boolean' ? ['True', 'False'] : question.options ?? [];
-  return <div className="answer-options">{options.map((option, i) => { const selected = question.type === 'multiple' ? Array.isArray(value) && value.includes(option) : value === option; return <button type="button" key={option} aria-pressed={selected} className={`answer-option ${selected ? 'answer-selected' : ''}`} data-testid={`option-${question.id}-${i}`} onClick={() => { if (question.type === 'multiple') { const current = Array.isArray(value) ? value : []; onChange(current.includes(option) ? current.filter(item => item !== option) : [...current, option]); } else onChange(option); }}><span className={`option-mark ${question.type === 'multiple' ? 'option-square' : ''}`}>{selected && <Check size={15} />}</span><span>{option}</span></button>; })}</div>;
-}
-function Submission() {
-  const { examId = '', attemptId = '' } = useParams(); const exam = examinations.find(e => e.id === examId); const attempt = safeAttempts().find(a => a.id === attemptId);
-  if (!exam || !attempt || attempt.state !== 'submitted' || !attempt.reference) return <><PageTitle title="Submission not available" detail="No confirmed submission could be found in this browser." /><Link href="/history" className="text-link">View attempt history</Link></>;
-  const answered = Object.values(attempt.answers).filter(a => Array.isArray(a) ? a.length : String(a).trim()).length;
-  return <div className="submission-wrap"><div className="submission-card"><div className="success-mark"><Check size={26} /></div><div className="eyebrow">ASSESSMENT RECEIVED</div><h1>Submission confirmed</h1><p>Your attempt has been recorded in this browser. Keep the reference below for your records.</p><div className="reference-box"><small>SUBMISSION REFERENCE</small><strong data-testid="value-submission-reference">{attempt.reference}</strong></div><div className="submission-details"><span>Assessment <strong>{exam.title}</strong></span><span>Submitted <strong data-testid="value-submission-time">{dateLabel(attempt.submittedAt ?? new Date().toISOString())}</strong></span><span>Responses saved <strong>{answered} of {exam.questionCount}</strong></span></div><Status tone="amber">Result pending release</Status><div className="prototype-disclaimer"><CircleAlert size={16} /> This confirmation is stored locally as prototype data, not sent to your institution.</div><div className="submission-actions"><Link href="/dashboard" className="button button-primary" data-testid="link-submission-dashboard">Return to dashboard <ChevronRight size={16} /></Link><Link href="/history" className="button button-secondary" data-testid="link-submission-history">Attempt history</Link></div></div></div>;
-}
-function ResultsPage() {
-  const results = safeResults(); const attempts = safeAttempts().filter(a => a.state === 'submitted');
-  const rows: { key: string; exam: Examination; result: Result | null; date: string }[] = results.flatMap(result => { const exam = examinations.find(e => e.id === result.examId); if (!exam) return []; const attempt = attempts.find(item => item.id === result.attemptId); return [{ key: result.id, exam, result, date: attempt?.submittedAt ?? exam.scheduledStart }]; });
-  for (const attempt of attempts) {
-    if (results.some(result => result.attemptId === attempt.id)) continue;
-    const exam = examinations.find(item => item.id === attempt.examId); if (!exam) continue;
-    rows.push({ key: attempt.id, exam, result: null, date: attempt.submittedAt ?? attempt.startedAt });
-  }
-  const releasedCount = rows.filter(row => row.result?.releaseStatus === 'released').length;
-  const pendingCount = rows.length - releasedCount;
-  return <><PageTitle eyebrow="ACADEMIC OUTCOMES" title="Results" detail="Released outcomes and assessments awaiting publication." />{storageUnavailable() && <div className="error-box" role="alert">Browser storage could not be read. Local attempt records may be unavailable.</div>}<div className="results-summary"><div><span className="summary-icon"><FileCheck2 size={19} /></span><span><small>RELEASED</small><strong>{releasedCount}</strong></span></div><div><span className="summary-icon summary-pending"><Clock3 size={19} /></span><span><small>PENDING RELEASE</small><strong>{pendingCount}</strong></span></div></div><section className="panel results-panel"><div className="section-head"><div><div className="eyebrow">YOUR RESULTS</div><h2>Assessment outcomes</h2></div><span className="prototype-tag">DEMO RECORDS</span></div>{rows.length === 0 ? <EmptyState icon={<FileCheck2 size={23} />} title="No results to show" description="Released results will appear here when they are available." /> : <div className="table-wrap"><table><thead><tr><th>ASSESSMENT</th><th>DATE</th><th>OUTCOME</th><th>STATUS</th><th /></tr></thead><tbody>{rows.map(row => <ResultRow key={row.key} exam={row.exam} result={row.result} date={dateLabel(row.date, { dateStyle: 'medium' })} />)}</tbody></table></div>}</section><div className="bottom-note"><CircleAlert size={17} /><span>Pending means no result has been published. Scores are shown only for released result records.</span></div></>;
-}
-function ResultRow({ exam, result, date }: { exam: Examination; result: Result | null; date: string }) {
-  return <tr data-testid={`row-result-${result?.id ?? exam.id}`}><td><strong>{exam.title}</strong><small>{exam.subject}</small></td><td>{date}</td><td>{result?.releaseStatus === 'released' ? <><strong>{result.score} / {result.total}</strong><small>{result.percent}%</small></> : <span className="muted">Not yet published</span>}</td><td><Status tone={result?.releaseStatus === 'released' ? result.passed ? 'green' : 'red' : 'amber'}>{result?.releaseStatus === 'released' ? result.passed ? 'Passed' : 'Not passed' : 'Pending'}</Status></td><td>{result?.releaseStatus === 'released' ? <Link href={`/results/${result.id}`} className="text-link" data-testid={`link-result-${result.id}`}>View <ChevronRight size={14} /></Link> : <span className="muted">—</span>}</td></tr>;
-}
-function ResultDetails() {
-  const { resultId = '' } = useParams(); const result = safeResults().find(r => r.id === resultId); const exam = examinations.find(e => e.id === result?.examId); const attempt = result ? safeAttempts().find(a => a.id === result.attemptId) : undefined;
-  if (!result || !exam || result.releaseStatus !== 'released') return <><PageTitle eyebrow="RESULT DETAILS" title="Result unavailable" detail="This result has not been released or is not available to this student." /><Link href="/results" className="text-link">Back to results</Link></>;
-  return <><div className="back-row"><Link href="/results" className="text-link" data-testid="link-back-results"><ChevronLeft size={16} /> Results</Link><Status tone={result.passed ? 'green' : 'red'}>{result.passed ? 'Passed' : 'Not passed'}</Status></div><PageTitle eyebrow={exam.subject} title={exam.title} detail="Released result summary." /><section className="result-detail-layout"><div className="panel score-card"><div className="eyebrow">FINAL SCORE</div><div className="score-display"><strong>{result.score}</strong><span> / {result.total}<small> marks</small></span></div><div className="score-track"><i style={{ width: `${result.percent}%` }} /></div><div className="score-foot"><span>{result.percent}%</span><span>{result.passed ? 'Passing outcome' : 'Below pass threshold'}</span></div></div><div className="panel result-meta"><div className="eyebrow">RESULT RECORD</div><Metric label="ASSESSMENT" value={exam.subject} /><Metric label="RELEASE STATUS" value="Published" /><Metric label="REVIEW ACCESS" value={result.reviewAllowed ? 'Available' : 'Not available'} /></div></section>{result.reviewAllowed && attempt && <section className="panel authorized-review"><div className="eyebrow">AUTHORIZED REVIEW</div><h2>Submitted responses</h2><p>Review is available for this released result.</p>{exam.questions.map((question, index) => <div className="review-answer" key={question.id}><span>{String(index + 1).padStart(2, '0')}</span><div><strong>{question.text}</strong><small>Your response: {Array.isArray(attempt.answers[question.id]) ? (attempt.answers[question.id] as string[]).join(', ') : attempt.answers[question.id] || 'No response recorded'}</small></div></div>)}</section>}<div className="bottom-note"><ShieldCheck size={17} /><span>Review access is shown only where the result record grants permission. Answers and scoring are demonstration content.</span></div></>;
-}
-function HistoryPage() {
-  const [query, setQuery] = useState(''); const [filter, setFilter] = useState('all'); const results = safeResults(); const attempts = safeAttempts().filter(a => a.state === 'submitted').flatMap(attempt => { const exam = examinations.find(e => e.id === attempt.examId); return exam ? [{ attempt, exam }] : []; }).filter(({ exam, attempt }) => `${exam.title} ${exam.subject}`.toLowerCase().includes(query.toLowerCase()) && (filter === 'all' || (filter === 'result' ? results.some(r => r.attemptId === attempt.id && r.releaseStatus === 'released') : !results.some(r => r.attemptId === attempt.id && r.releaseStatus === 'released'))));
-  const samples = examinations.filter(e => e.id === 'cs101-practice');
-   return <><PageTitle eyebrow="YOUR RECORD" title="Attempt history" detail="Submitted assessments recorded in this prototype browser." />{storageUnavailable() && <div className="error-box" role="alert">Browser storage could not be read. Previously saved attempts may be unavailable.</div>}<div className="history-controls"><label className="search-box"><span className="sr-only">Search attempt history</span><input data-testid="input-history-search" type="search" placeholder="Search assessments…" value={query} onChange={e => setQuery(e.target.value)} /><span>⌕</span></label><label className="filter-select"><span className="sr-only">Filter by result status</span><select data-testid="select-history-filter" value={filter} onChange={e => setFilter(e.target.value)}><option value="all">All attempts</option><option value="result">Result released</option><option value="pending">Result pending</option></select></label></div><section className="panel history-panel"><div className="section-head"><div><div className="eyebrow">SUBMISSION RECORDS</div><h2>Previous attempts</h2></div><span className="prototype-tag">{attempts.length + (query || filter !== 'all' ? 0 : samples.length)} RECORDS</span></div>{attempts.length === 0 && (!samples.length || query || filter !== 'all') ? <EmptyState icon={<History size={22} />} title="No matching attempts" description="Try a different search or filter. Submitted attempts will appear here." /> : <div className="history-list">{!query && filter === 'all' && samples.map(exam => <div className="history-item" key={exam.id}><div className="history-symbol"><FileCheck2 size={18} /></div><div className="history-main"><strong>{exam.title}</strong><span>{exam.subject} · Sample record · May 12, 2025</span><small>Reference NB-SAMPLE-204</small></div><div className="history-outcome"><strong>17 / 20</strong><Status tone="green">Result released</Status></div><Link href="/results/result-practice" aria-label="View sample result" className="row-arrow" data-testid="link-history-result-sample"><ChevronRight size={18} /></Link></div>)}{attempts.map(({ attempt, exam }) => { const released = results.find(r => r.attemptId === attempt.id && r.releaseStatus === 'released'); return <div className="history-item" key={attempt.id}><div className="history-symbol"><FileCheck2 size={18} /></div><div className="history-main"><strong>{exam.title}</strong><span>{exam.subject} · Submitted {dateLabel(attempt.submittedAt ?? attempt.startedAt)}</span><small>Reference {attempt.reference}</small></div><div className="history-outcome">{released ? <><strong>Result available</strong><Status tone="green">Released</Status></> : <Status tone="amber">Result pending</Status>}</div>{released ? <Link href={`/results/${released.id}`} aria-label="View result" className="row-arrow" data-testid={`link-history-result-${attempt.id}`}><ChevronRight size={18} /></Link> : <span />}</div>; })}</div>}</section></>;
-}
-function Profile() { return <><PageTitle eyebrow="STUDENT ACCOUNT" title="My profile" detail="Read-only details for the current demo student." /><section className="profile-layout"><div className="panel profile-card"><div className="profile-banner"><div className="profile-avatar">{demoStudent.name.split(' ').map(n => n[0]).join('')}</div><div><div className="eyebrow">STUDENT</div><h2>{demoStudent.name}</h2><span>{demoStudent.id}</span></div><Status tone="green">Active demo account</Status></div><div className="profile-fields"><ProfileField label="Full name" value={demoStudent.name} /><ProfileField label="Student ID" value={demoStudent.id} /><ProfileField label="Institution" value={demoStudent.institution} /><ProfileField label="Department" value={demoStudent.department} /><ProfileField label="Course" value={demoStudent.course} /><ProfileField label="Email address" value={demoStudent.email} /></div></div><aside className="panel profile-notice"><div className="notice-icon"><ShieldCheck size={20} /></div><div className="eyebrow">PROTOTYPE ACCOUNT</div><h3>Student details are simulated</h3><p>This profile is sample data held in the frontend. It is not connected to university identity or records.</p></aside></section></>; }
-function ProfileField({ label, value }: { label: string; value: string }) { return <div className="profile-field"><small>{label}</small><strong data-testid={`value-profile-${label.toLowerCase().replaceAll(' ', '-')}`}>{value}</strong></div>; }
-function EmptyState({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) { return <div className="empty-state"><span>{icon}</span><h3>{title}</h3><p>{description}</p></div>; }
-function NotFound() { return <div className="not-found"><div className="empty-symbol">404</div><h1>Page not found</h1><p>The page you are looking for is not available in this student portal.</p><Link href="/dashboard" className="button button-primary" data-testid="link-not-found-home">Back to overview</Link></div>; }
 
 export default App;

@@ -1,0 +1,11 @@
+
+> @workspace/online-examination@0.0.0 dev C:\Users\PC\Documents\Online-Examination-System\artifacts\online-examination
+> vite --config vite.config.ts --host 0.0.0.0
+
+
+  [32m[1mVITE[22m v7.3.6[39m  [2mready in [0m[1m8858[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5173[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://192.168.137.1:[1m5173[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://10.215.30.243:[1m5173[22m/[39m
+ ELIFECYCLE  Command failed with exit code 1.
