@@ -1,0 +1,12 @@
+{
+  "buildCommand": "cd artifacts/online-examination && pnpm run build",
+  "outputDirectory": "artifacts/online-examination/dist/public",
+  "installCommand": "pnpm install",
+  "framework": null,
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
