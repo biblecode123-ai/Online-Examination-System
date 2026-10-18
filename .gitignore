@@ -47,3 +47,7 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Submodules
+ofijan-backend
+ofijan-cms
