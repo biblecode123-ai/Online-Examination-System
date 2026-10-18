@@ -3,7 +3,6 @@
   "outputDirectory": "dist/public",
   "installCommand": "pnpm install",
   "framework": null,
-  "workingDirectory": "artifacts/online-examination",
   "rewrites": [
     {
       "source": "/(.*)",
