@@ -150,6 +150,22 @@ export function ExamDetails() {
     );
   }
 
+  if (exam && !isRealExam(exam)) {
+    return (
+      <>
+        <div className="back-row">
+          <Link href="/exams" className="text-link" data-testid="link-back-exams">
+            <ChevronLeft size={16} /> My examinations
+          </Link>
+        </div>
+        <ErrorBox error="This examination is not a real (proctored) exam and cannot be opened here." />
+        <div className="back-row">
+          <Link href="/exams" className="text-link">My examinations</Link>
+        </div>
+      </>
+    );
+  }
+
   const startLabel = resumable
     ? 'Resume assessment'
     : state === 'Upcoming'
