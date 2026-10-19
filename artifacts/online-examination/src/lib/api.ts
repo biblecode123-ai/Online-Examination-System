@@ -14,7 +14,7 @@
 const RAW_BASE =
   (typeof import.meta.env.VITE_API_BASE_URL === 'string' &&
     import.meta.env.VITE_API_BASE_URL.trim()) ||
-  'https://2019api.ofijan.com';
+  'http://localhost:3000';
 
 /** e.g. https://2019api.ofijan.com (no trailing slash) */
 export const API_BASE_URL = RAW_BASE.replace(/\/+$/, '');
