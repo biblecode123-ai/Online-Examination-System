@@ -163,11 +163,9 @@ export function serverNow(): number {
 }
 
 function buildUrl(path: string, query?: Record<string, QueryValue>): string {
-  // In production, the proxy expects the full API path (e.g., /api/proxy/api/v1/login)
-  // In development, API_ROOT already includes /api, so we just append the path
-  const url = import.meta.env.PROD
-    ? `${API_ROOT}/api${path.startsWith('/') ? path : `/${path}`}`
-    : `${API_ROOT}${path.startsWith('/') ? path : `/${path}`}`;
+  // In production, API_ROOT is /api/proxy, so we append the path directly (e.g., /api/proxy/v1/login)
+  // In development, API_ROOT is http://localhost:3000/api, so we append the path (e.g., http://localhost:3000/api/v1/login)
+  const url = `${API_ROOT}${path.startsWith('/') ? path : `/${path}`}`;
   if (!query) return url;
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
