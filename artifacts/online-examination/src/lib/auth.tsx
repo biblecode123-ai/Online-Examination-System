@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { getToken, onSessionExpired, setToken } from './api';
+import { ApiError, getToken, onSessionExpired, setToken } from './api';
 import { authApi } from './endpoints';
 import type { User } from './types';
 
@@ -46,6 +46,15 @@ function cacheUser(user: User | null): void {
   }
 }
 
+/**
+ * The examination portal is a student-only surface. The backend enforces the
+ * same rule on POST /v1/login, but every session accepted here is re-checked
+ * so a token issued elsewhere can never open the portal.
+ */
+function isStudent(user: Pick<User, 'role_slug'> | null): boolean {
+  return user?.role_slug === 'student';
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(() => readCachedUser());
   const [status, setStatus] = useState<AuthStatus>(() =>
@@ -69,6 +78,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const profile = await authApi.profile();
         if (cancelled) return;
+        if (!isStudent(profile)) {
+          applySignOut('The online examination portal is available to student accounts only.');
+          return;
+        }
         cacheUser(profile);
         setUser(profile);
         setStatus('authenticated');
@@ -79,8 +92,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else if (error && typeof error === 'object' && 'kind' in error && error.kind === 'network') {
           // Offline with a stored session: keep the cached identity, the API
           // layer will surface connectivity errors where they happen.
-          setUser(readCachedUser());
-          setStatus(readCachedUser() ? 'authenticated' : 'anonymous');
+          const cached = readCachedUser();
+          if (!isStudent(cached)) {
+            applySignOut('The online examination portal is available to student accounts only.');
+            return;
+          }
+          setUser(cached);
+          setStatus(cached ? 'authenticated' : 'anonymous');
         } else {
           applySignOut('Your session could not be validated. Please sign in again.');
         }
@@ -104,6 +122,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const result = await authApi.login(email, password);
     setToken(result.token);
     const profile = await authApi.profile();
+    if (!isStudent(profile)) {
+      try {
+        await authApi.logout(); // revoke the token server-side
+      } catch {
+        /* token cleanup is best effort — the local session is dropped below */
+      }
+      setToken(null);
+      throw new ApiError(
+        'The online examination portal is available to student accounts only.',
+        403,
+        'http',
+      );
+    }
     cacheUser(profile);
     setUser(profile);
     setStatus('authenticated');
