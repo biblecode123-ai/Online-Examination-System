@@ -5,6 +5,10 @@
   "framework": null,
   "rewrites": [
     {
+      "source": "/api/proxy/:path*",
+      "destination": "/api/proxy"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },

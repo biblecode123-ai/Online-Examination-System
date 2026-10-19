@@ -14,13 +14,28 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  // Get the path from the request URL and strip the /api/proxy prefix
-  const path = req.url || '';
+  // Recover the original request path. Vercel rewrites /api/proxy/:path* -> /api/proxy,
+  // so req.url is the rewritten path (/api/proxy); the original path is exposed via
+  // x-vercel-original-path (or x-vercel-original-url as a full URL fallback).
+  const incomingHeaders = req.headers || {};
+  let originalPath =
+    incomingHeaders['x-vercel-original-path'] ||
+    incomingHeaders['x-vercel-original-url'] ||
+    req.url ||
+    '';
+  if (originalPath && originalPath.startsWith('http')) {
+    try {
+      originalPath = new URL(originalPath).pathname;
+    } catch {
+      /* fall back to the raw header value */
+    }
+  }
+
   // Remove /api/proxy prefix if present, keep /api for the backend
   // Example: /api/proxy/v1/login -> /api/v1/login
-  const cleanPath = path.startsWith('/api/proxy')
-    ? '/api' + path.substring('/api/proxy'.length)
-    : path;
+  const cleanPath = originalPath.startsWith('/api/proxy')
+    ? '/api' + originalPath.substring('/api/proxy'.length)
+    : originalPath;
   const targetUrl = `${PROXY_TARGET}${cleanPath}`;
 
   // Build headers for the forwarded request
