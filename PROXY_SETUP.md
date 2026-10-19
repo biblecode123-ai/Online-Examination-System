@@ -4,30 +4,57 @@
 The production backend at `https://2019api.ofijan.com` does not allow CORS requests from your Vercel deployment (`https://online-examination-system-olive.vercel.app`), causing login failures.
 
 ## Solution
-A local proxy server has been implemented to forward API requests to the production backend while handling CORS headers.
+A Vercel Edge Function proxy has been implemented to forward API requests to the production backend while handling CORS headers. This is the recommended solution for production deployment.
 
 ## Architecture
 
 ```
-Frontend (Vercel) → Local Proxy Server → Production Backend (2019api.ofijan.com)
+Frontend (Vercel) → Vercel Edge Function Proxy → Production Backend (2019api.ofijan.com)
 ```
 
-The proxy server:
-1. Receives requests from the frontend
+The proxy:
+1. Receives requests from the frontend at `/api/proxy`
 2. Forwards them to the production backend
 3. Adds CORS headers to responses
 4. Returns responses to the frontend
 
 ## Setup Instructions
 
-### 1. Install Dependencies
-Navigate to the api-server directory and install dependencies:
+### Production (Vercel Deployment)
+
+The proxy is already configured as a Vercel Edge Function at `api/proxy.ts`. It will automatically be deployed with your Vercel deployment.
+
+**No additional setup needed** - the frontend automatically uses the proxy in production environment.
+
+### Development (Local)
+
+For local development, you have two options:
+
+#### Option 1: Use Local Laravel Backend (Recommended)
+1. Start the Laravel backend on port 3000:
+```bash
+cd ../ofijan-backend
+php artisan serve --port=3000
+```
+
+2. Start the frontend:
+```bash
+cd artifacts/online-examination
+pnpm run dev
+```
+
+The frontend will automatically use `http://localhost:3000` for API requests.
+
+#### Option 2: Use Local Proxy Server
+If you want to use the local proxy server that forwards to production:
+
+1. Install dependencies:
 ```bash
 cd artifacts/api-server
 pnpm install
 ```
 
-### 2. Start the Proxy Server
+2. Start the proxy server:
 ```bash
 cd artifacts/api-server
 pnpm run dev
@@ -35,32 +62,75 @@ pnpm run dev
 
 The proxy will start on `http://localhost:3000`
 
-### 3. Configure Frontend
-The frontend is now configured to use the local proxy by default:
-- **Default API URL**: `http://localhost:3000`
-- **Environment Variable**: `VITE_API_BASE_URL` (can override default)
-
-To use the proxy, no changes are needed - the frontend will automatically use `http://localhost:3000`.
-
-To use the production backend directly (if CORS is resolved):
+3. Start the frontend:
 ```bash
-VITE_API_BASE_URL=https://2019api.ofijan.com
+cd artifacts/online-examination
+pnpm run dev
 ```
 
-### 4. Deploy the Proxy Server
+## Environment Variables
 
-#### Option A: Deploy to a Cloud Platform
-Deploy the proxy server to a platform that supports Node.js (e.g., Railway, Render, Heroku):
+### Frontend (`artifacts/online-examination`)
+- `VITE_API_BASE_URL`: API base URL (optional)
+  - Development: defaults to `http://localhost:3000`
+  - Production: automatically uses `/api/proxy` (Vercel Edge Function)
 
-1. Push the code to your git repository
-2. Connect to your deployment platform
-3. Set environment variable `PROXY_TARGET=https://2019api.ofijan.com`
-4. Deploy
+### Proxy (Vercel Edge Function)
+- `PROXY_TARGET`: The production backend URL (default: `https://2019api.ofijan.com`)
+  - Set this in Vercel project settings if you need to change the target
 
-After deployment, update the frontend's `VITE_API_BASE_URL` to point to your deployed proxy URL.
+## Testing
 
-#### Option B: Use Vercel Serverless Functions
-Alternatively, you can create Vercel serverless functions to proxy requests. This would be added to the `api/` directory in the frontend project.
+### Local Development
+1. Start the Laravel backend: `cd ../ofijan-backend && php artisan serve --port=3000`
+2. Start the frontend: `cd artifacts/online-examination && pnpm run dev`
+3. Open the frontend in your browser
+4. Try to login with valid student credentials
+
+### Production
+1. Deploy to Vercel (the Edge Function proxy will be deployed automatically)
+2. Test the login functionality on the deployed site
+
+## Backend Login Logic
+
+The backend enforces **student-only login**:
+
+From `ofijan-backend/app/Http/Controllers/Api/V1/Auth/AuthController.php` (lines 140-149):
+```php
+// This endpoint backs the online examination portal, a student-facing
+// surface: privileged roles (admin, teacher, encoder) must authenticate
+// through their own entry points.
+$roleSlug = $user->role?->slug;
+if ($roleSlug && $roleSlug !== 'student') {
+    return $this->forbiddenResponse('The online examination portal is available to student accounts only.');
+}
+```
+
+Only users with `role.slug === 'student'` can login through this portal. Other roles (admin, teacher, encoder) are blocked.
+
+## Files Modified
+
+- `artifacts/online-examination/api/proxy.ts` - Vercel Edge Function proxy (new)
+- `artifacts/online-examination/src/lib/api.ts` - Updated to use proxy in production
+- `artifacts/online-examination/vercel.json` - Added API route rewrite rule
+
+## Troubleshooting
+
+### CORS Still Failing in Production
+- Verify the Edge Function is deployed (check Vercel dashboard)
+- Check that `PROXY_TARGET` environment variable is set correctly in Vercel
+- Check browser console for specific error messages
+- Ensure the frontend is using the proxy URL (check Network tab in DevTools)
+
+### Local Development Issues
+- Ensure Laravel backend is running on port 3000
+- Check if port 3000 is already in use
+- Verify database connection in Laravel `.env` file
+
+### Production Backend Errors
+- The proxy forwards all errors from the production backend
+- Check Vercel function logs for detailed error information
+- Verify production backend is accessible and credentials are valid
 
 ## Proxy Configuration
 

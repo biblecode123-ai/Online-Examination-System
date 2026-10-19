@@ -4,9 +4,26 @@
 The Online Examination System uses the production backend at `https://2019api.ofijan.com` for all authentication and data operations.
 
 ## API Configuration
-- **Base URL**: `https://2019api.ofijan.com`
-- **API Root**: `https://2019api.ofijan.com/api`
-- **Environment Variable**: `VITE_API_BASE_URL` (defaults to production URL if not set)
+
+### Production (Vercel Deployment)
+- **Proxy URL**: `/api/proxy` (Vercel Edge Function)
+- **Target Backend**: `https://2019api.ofijan.com`
+- **Environment Variable**: `PROXY_TARGET` (defaults to `https://2019api.ofijan.com`)
+
+### Development (Local)
+- **Base URL**: `http://localhost:3000` (Laravel backend)
+- **API Root**: `http://localhost:3000/api`
+- **Environment Variable**: `VITE_API_BASE_URL` (optional, defaults to `http://localhost:3000`)
+
+## CORS Proxy
+
+The production backend does not allow CORS requests from Vercel. To solve this, a Vercel Edge Function proxy is used:
+
+- **Location**: `artifacts/online-examination/api/proxy.ts`
+- **Path**: `/api/proxy`
+- **Function**: Forwards requests to production backend with CORS headers
+
+See `PROXY_SETUP.md` for detailed setup instructions.
 
 ## Login Flow
 
