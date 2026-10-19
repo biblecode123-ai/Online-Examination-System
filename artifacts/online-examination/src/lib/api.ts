@@ -14,12 +14,18 @@
 const RAW_BASE =
   (typeof import.meta.env.VITE_API_BASE_URL === 'string' &&
     import.meta.env.VITE_API_BASE_URL.trim()) ||
-  'http://localhost:3000';
+  (import.meta.env.PROD ? '' : 'http://localhost:3000');
 
 /** e.g. https://2019api.ofijan.com (no trailing slash) */
 export const API_BASE_URL = RAW_BASE.replace(/\/+$/, '');
-/** All backend routes live under /api (see ofijan-backend/routes/api.php). */
-export const API_ROOT = `${API_BASE_URL}/api`;
+
+/** All backend routes live under /api (see ofijan-backend/routes/api.php).
+ *  In production, we use the Vercel serverless function proxy (/api/proxy)
+ *  which forwards requests to the production backend.
+ */
+export const API_ROOT = import.meta.env.PROD
+  ? '/api/proxy'
+  : `${API_BASE_URL}/api`;
 
 const TOKEN_STORAGE_KEY = 'ofijan.student.token.v1';
 
@@ -157,7 +163,11 @@ export function serverNow(): number {
 }
 
 function buildUrl(path: string, query?: Record<string, QueryValue>): string {
-  const url = `${API_ROOT}${path.startsWith('/') ? path : `/${path}`}`;
+  // In production, the proxy expects the full API path (e.g., /api/proxy/api/v1/login)
+  // In development, API_ROOT already includes /api, so we just append the path
+  const url = import.meta.env.PROD
+    ? `${API_ROOT}/api${path.startsWith('/') ? path : `/${path}`}`
+    : `${API_ROOT}${path.startsWith('/') ? path : `/${path}`}`;
   if (!query) return url;
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
