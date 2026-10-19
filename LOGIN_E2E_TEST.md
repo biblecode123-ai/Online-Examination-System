@@ -131,7 +131,7 @@ if ($roleSlug && $roleSlug !== 'student') {
         'ip' => $request->ip(),
     ]);
 
-    return $this->forbiddenResponse('The online examination portal is available to student accounts only.');
+    return $this->forbiddenResponse('Ofijan ExamFlow is available to student accounts only.');
 }
 ```
 
@@ -159,7 +159,7 @@ const login = useCallback(async (email: string, password: string): Promise<User>
     }
     setToken(null);
     throw new ApiError(
-      'The online examination portal is available to student accounts only.',
+      'Ofijan ExamFlow is available to student accounts only.',
       403,
       'http',
     );
@@ -180,7 +180,7 @@ useEffect(() => {
       const profile = await authApi.profile();
       if (cancelled) return;
       if (!isStudent(profile)) {
-        applySignOut('The online examination portal is available to student accounts only.');
+        applySignOut('Ofijan ExamFlow is available to student accounts only.');
         return;
       }
       cacheUser(profile);
@@ -344,7 +344,7 @@ const login = useCallback(async (email: string, password: string): Promise<User>
   if (!isStudent(profile)) {
     await authApi.logout(); // revoke token
     setToken(null);
-    throw new ApiError('The online examination portal is available to student accounts only.', 403, 'http');
+    throw new ApiError('Ofijan ExamFlow is available to student accounts only.', 403, 'http');
   }
   
   // 5. Cache user data

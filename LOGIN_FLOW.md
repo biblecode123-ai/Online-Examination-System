@@ -1,7 +1,7 @@
 # Student Login Flow - Production Backend
 
 ## Overview
-The Online Examination System uses the production backend at `https://2019api.ofijan.com` for all authentication and data operations.
+Ofijan ExamFlow uses the production backend at `https://2019api.ofijan.com` for all authentication and data operations.
 
 ## API Configuration
 

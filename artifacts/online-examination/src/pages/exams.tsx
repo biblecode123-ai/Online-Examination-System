@@ -12,6 +12,7 @@ import {
 } from '../lib/examState';
 import { useExams, useMyAttempts } from '../lib/queries';
 import type { Attempt, Exam } from '../lib/types';
+import { isRealExam } from '../lib/endpoints';
 
 function ExamCard({ exam, attempts, departmentId }: { exam: Exam; attempts: Attempt[]; departmentId?: number | null }) {
   const state = getStudentExamState(exam, attempts, departmentId ?? null);
@@ -103,9 +104,10 @@ export function ExamList() {
     const rows = examsQuery.data?.data ?? [];
     return rows.filter(
       (exam) =>
-        !exam.department_id ||
-        !user?.department_id ||
-        Number(exam.department_id) === Number(user.department_id),
+        isRealExam(exam) &&
+        (!exam.department_id ||
+          !user?.department_id ||
+          Number(exam.department_id) === Number(user.department_id)),
     );
   }, [examsQuery.data, user?.department_id]);
 

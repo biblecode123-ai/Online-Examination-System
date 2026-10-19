@@ -97,12 +97,12 @@ The backend enforces **student-only login**:
 
 From `ofijan-backend/app/Http/Controllers/Api/V1/Auth/AuthController.php` (lines 140-149):
 ```php
-// This endpoint backs the online examination portal, a student-facing
+// This endpoint backs the Ofijan ExamFlow portal, a student-facing
 // surface: privileged roles (admin, teacher, encoder) must authenticate
 // through their own entry points.
 $roleSlug = $user->role?->slug;
 if ($roleSlug && $roleSlug !== 'student') {
-    return $this->forbiddenResponse('The online examination portal is available to student accounts only.');
+    return $this->forbiddenResponse('Ofijan ExamFlow is available to student accounts only.');
 }
 ```
 

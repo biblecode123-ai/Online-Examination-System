@@ -79,7 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const profile = await authApi.profile();
         if (cancelled) return;
         if (!isStudent(profile)) {
-          applySignOut('The online examination portal is available to student accounts only.');
+          applySignOut('Ofijan ExamFlow is available to student accounts only.');
           return;
         }
         cacheUser(profile);
@@ -94,7 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // layer will surface connectivity errors where they happen.
           const cached = readCachedUser();
           if (!isStudent(cached)) {
-            applySignOut('The online examination portal is available to student accounts only.');
+            applySignOut('Ofijan ExamFlow is available to student accounts only.');
             return;
           }
           setUser(cached);
@@ -130,7 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setToken(null);
       throw new ApiError(
-        'The online examination portal is available to student accounts only.',
+        'Ofijan ExamFlow is available to student accounts only.',
         403,
         'http',
       );

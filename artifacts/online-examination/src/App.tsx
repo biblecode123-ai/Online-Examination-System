@@ -91,7 +91,7 @@ function HeaderNotifications() {
         <div className="header-popover notification-popover">
           <div className="popover-head">
             <strong>Notifications</strong>
-            <small>From your examination portal</small>
+            <small>From Ofijan ExamFlow</small>
           </div>
           {notifications.length === 0 ? (
             <div className="popover-notification">
@@ -214,8 +214,8 @@ function PortalShell({ children }: { children: React.ReactNode }) {
             <GraduationCap size={21} />
           </span>
           <span>
-            <strong>Madda Walabu</strong>
-            <small>UNIVERSITY EXAMINATIONS</small>
+            <strong>Ofijan ExamFlow</strong>
+            <small>Madda Walabu University</small>
           </span>
         </Link>
         <div className="nav-caption">STUDENT SPACE</div>
@@ -229,11 +229,9 @@ function PortalShell({ children }: { children: React.ReactNode }) {
         <div className="sidebar-spacer" />
         <div className="prototype-note">
           <ShieldCheck size={16} />
-          <span>
-            Secure examination portal
+            <strong>Secure ExamFlow portal</strong>
             <br />
             <small>Server-enforced timers &amp; grading</small>
-          </span>
         </div>
         <div className="sidebar-student">
           <div className="avatar">{initials(name)}</div>
@@ -289,7 +287,7 @@ function PortalShell({ children }: { children: React.ReactNode }) {
         <div className="content-area">{children}</div>
 
         <footer className="footer">
-          <span>Madda Walabu University · Student examination portal</span>
+          <span>Madda Walabu University · Ofijan ExamFlow</span>
           <span>Powered by the Ofijan examination server</span>
         </footer>
       </main>
