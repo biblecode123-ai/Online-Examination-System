@@ -9,6 +9,7 @@ import {
   KeyRound,
   Loader2,
   Lock,
+  ShieldCheck,
 } from 'lucide-react';
 import { Link, useLocation, useParams } from 'wouter';
 import { ErrorBox, LoadingBlock, Metric, PageTitle, Status } from '../components/shell';
@@ -32,7 +33,7 @@ interface StandardStartBody {
 export function ExamDetails() {
   const { examId = '' } = useParams();
   const [, navigate] = useLocation();
-  const { user } = useAuth();
+  const { user, mustChangePassword } = useAuth();
 
   const examQuery = useExam(examId);
   const attemptsQuery = useMyAttempts();
@@ -55,6 +56,10 @@ export function ExamDetails() {
   const needsPassword = Boolean(exam?.has_password);
   const passwordBlocked = needsPassword && !realExam;
 
+  // Teacher-created accounts must set their own password before opening any
+  // exam — the temporary throwaway value is not a real credential.
+  const mustChangeBeforeExam = mustChangePassword;
+
   const instructions = useMemo(() => {
     if (!exam?.instructions?.length) return [];
     return [...exam.instructions]
@@ -66,6 +71,7 @@ export function ExamDetails() {
   const canStart =
     state === 'Available' &&
     !passwordBlocked &&
+    !mustChangeBeforeExam &&
     (!needsPassword || password.length > 0) &&
     !starting;
 
@@ -170,13 +176,17 @@ export function ExamDetails() {
     ? 'Resume assessment'
     : state === 'Upcoming'
       ? 'Not yet available'
-      : state === 'Missed'
-        ? 'Assessment window closed'
-        : state === 'Completed' || (existingAttempt && !isActiveAttempt(existingAttempt))
-          ? 'Attempt already submitted'
-          : state === 'Other department'
-            ? 'Not available to your department'
-            : 'Start assessment';
+      : state === 'Ready'
+        ? 'Awaiting teacher activation'
+        : state === 'Missed'
+          ? 'Assessment window closed'
+          : state === 'Closed' || state === 'Cancelled' || state === 'Archived'
+            ? 'Assessment closed'
+            : state === 'Completed' || (existingAttempt && !isActiveAttempt(existingAttempt))
+              ? 'Attempt already submitted'
+              : state === 'Other department'
+                ? 'Not available to your department'
+                : 'Start assessment';
 
   return (
     <>
@@ -323,17 +333,27 @@ export function ExamDetails() {
             </div>
           )}
 
+          {mustChangeBeforeExam && (
+            <div className="error-box" role="alert" data-testid="must-change-password">
+              <ShieldCheck size={15} />
+              <span>
+                Your account was created by a teacher and must set its own password before
+                opening any examination. Visit your profile to choose a password.
+              </span>
+            </div>
+          )}
+
           <Button
             onClick={onPrimaryAction}
             disabled={
               !resumable &&
-              (state !== 'Available' || !acknowledged || passwordBlocked)
+              (state !== 'Available' || !acknowledged || passwordBlocked || mustChangeBeforeExam)
             }
             testId="button-start-exam"
             label={startLabel}
           />
 
-          {!resumable && !acknowledged && state === 'Available' && (
+          {!resumable && !acknowledged && state === 'Available' && !mustChangeBeforeExam && (
             <small className="button-hint">Acknowledge the instructions to continue.</small>
           )}
           {state === 'Upcoming' && exam.active_from && (
@@ -343,6 +363,11 @@ export function ExamDetails() {
           )}
           {state === 'Missed' && (
             <small className="button-hint">The assessment window has ended.</small>
+          )}
+          {mustChangeBeforeExam && (
+            <small className="button-hint">
+              Complete password setup on your profile page to unlock examinations.
+            </small>
           )}
         </aside>
       </div>

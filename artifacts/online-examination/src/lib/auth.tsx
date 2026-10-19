@@ -16,12 +16,15 @@ type AuthStatus = 'loading' | 'authenticated' | 'anonymous';
 interface AuthContextValue {
   user: User | null;
   status: AuthStatus;
+  /** True when the teacher-created account must set a password before first use. */
+  mustChangePassword: boolean;
   /** Human-readable notice (session expiry, forced sign-out). */
   notice: string | null;
   login: (email: string, password: string) => Promise<User>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   clearNotice: () => void;
+  setMustChangePassword: (value: boolean) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -60,12 +63,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>(() =>
     getToken() ? 'loading' : 'anonymous',
   );
+  const [mustChangePassword, setMustChangePassword] = useState<boolean>(() => {
+    try {
+      const raw = window.localStorage.getItem(USER_STORAGE_KEY);
+      if (!raw) return false;
+      const cached = JSON.parse(raw) as User;
+      return Boolean(cached?.must_change_password);
+    } catch {
+      return false;
+    }
+  });
   const [notice, setNotice] = useState<string | null>(null);
 
   const applySignOut = useCallback((message?: string | null) => {
     setToken(null);
     cacheUser(null);
     setUser(null);
+    setMustChangePassword(false);
     setStatus('anonymous');
     if (message) setNotice(message);
   }, []);
@@ -84,6 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         cacheUser(profile);
         setUser(profile);
+        setMustChangePassword(Boolean(profile.must_change_password));
         setStatus('authenticated');
       } catch (error) {
         if (cancelled) return;
@@ -98,6 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return;
           }
           setUser(cached);
+          setMustChangePassword(Boolean(cached?.must_change_password));
           setStatus(cached ? 'authenticated' : 'anonymous');
         } else {
           applySignOut('Your session could not be validated. Please sign in again.');
@@ -137,6 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     cacheUser(profile);
     setUser(profile);
+    setMustChangePassword(Boolean(profile.must_change_password));
     setStatus('authenticated');
     setNotice(null);
     return profile;
@@ -151,19 +168,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const profile = await authApi.profile();
     cacheUser(profile);
     setUser(profile);
+    setMustChangePassword(Boolean(profile.must_change_password));
   }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
       status,
+      mustChangePassword,
       notice,
       login,
       logout,
       refreshProfile,
       clearNotice: () => setNotice(null),
+      setMustChangePassword,
     }),
-    [user, status, notice, login, logout, refreshProfile],
+    [user, status, mustChangePassword, notice, login, logout, refreshProfile],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

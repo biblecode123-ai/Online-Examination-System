@@ -22,13 +22,19 @@ import type {
   Exam,
   QuestionPayload,
   RealExamPublicSettings,
+  SectionContent,
 } from '../lib/types';
 
+// ─── TYPES ──────────────────────────────────────────────────────────────
 interface SavedAnswer {
   option_id?: number | null;
   text?: string;
 }
 
+// ─── SECTION TYPES (for structural rendering) ─────────────────────
+// These types are imported from types.ts and represent the structure we receive from the backend.
+
+// ─── HELPERS ────────────────────────────────────────────────────────────
 const textDraftKey = (attemptId: string) => `ofijan.exam.text-draft.${attemptId}`;
 const resultVisibilityKey = (attemptId: string) =>
   `ofijan.exam.result-visibility.${attemptId}`;
@@ -87,6 +93,9 @@ export function ExamAttempt() {
   const [reauthError, setReauthError] = useState('');
   const [reauthBusy, setReauthBusy] = useState(false);
   const [violationScore, setViolationScore] = useState<number | null>(null);
+
+  // ─── ADDED: Section State for structural rendering ────────────────────
+  const [sections, setSections] = useState<SectionContent[]>([]);
 
   // --- refs used by timers/listeners so callbacks never go stale ----------
   const realRef = useRef(false);
@@ -340,6 +349,8 @@ export function ExamAttempt() {
         }
 
         let questionRows: QuestionPayload[] = [];
+        let sectionData: SectionContent[] = []; // ─── REAL DATA ───
+        
         let expiresAt: string | null = attemptRecord.expires_at ?? null;
         let status: 'active' | 'locked' | 'ended' = 'active';
         let publicSettings: RealExamPublicSettings | null = null;
@@ -360,11 +371,17 @@ export function ExamAttempt() {
             violationRef.current = snapshot.violation_score;
             setViolationScore(snapshot.violation_score);
           }
-          questionRows = await realExamApi.questions(Number(attemptId), controller.signal);
+          
+          // ─── FETCH QUESTIONS AND SECTIONS ────────────────────────────────
+          const res = await realExamApi.questions(Number(attemptId), controller.signal);
           if (cancelled) return;
+          
+          questionRows = res.questions ?? [];
+          sectionData = res.sections ?? [];
         } else {
           const payload = await examApi.questions(examId, controller.signal);
           questionRows = payload.questions ?? [];
+          sectionData = payload.sections ?? [];
         }
 
         // Restore server-saved answers (option choices); text answers fall
@@ -387,6 +404,7 @@ export function ExamAttempt() {
         answersRef.current = restored;
         setAnswers(restored);
         setQuestions(questionRows);
+        setSections(sectionData); // ─── SET SECTION DATA ──────────────────
         setSettings(publicSettings);
         settingsRef.current = publicSettings;
         warnAtRef.current = publicSettings?.escalation_warn_at ?? null;
@@ -668,6 +686,10 @@ export function ExamAttempt() {
     );
   }
 
+  // ─── ADDED: Helper to find section for question ────────────────────────
+  const getSectionForQuestion = (qId: number) => 
+    sections.find(s => s.question_ids.includes(qId));
+
   const question = questions[current];
   const total = questions.length;
   const unanswered = total - answeredCount;
@@ -683,6 +705,8 @@ export function ExamAttempt() {
       violationScore;
   const warned =
     violationScore !== null && warnThreshold !== null && violationScore >= warnThreshold;
+
+  const currentSection = getSectionForQuestion(question.id);
 
   return (
     <div className="attempt-page">
@@ -846,6 +870,24 @@ export function ExamAttempt() {
         </aside>
 
         <section className="question-stage">
+          {/* ─── Section Header Rendering ────────────────────────── */}
+          {currentSection && (
+            <div className="section-header">
+              <h3>{currentSection.formatted_heading}</h3>
+              {currentSection.instructions && (
+                <div className="section-instructions">
+                  <p>{currentSection.instructions}</p>
+                </div>
+              )}
+              {currentSection.shared_material_content && (
+                <div 
+                  className="shared-material"
+                  dangerouslySetInnerHTML={{ __html: currentSection.shared_material_content }}
+                />
+              )}
+            </div>
+          )}
+
           <div className="question-stage-head">
             <span>
               QUESTION {String(current + 1).padStart(2, '0')} <i>OF</i> {String(total).padStart(2, '0')}

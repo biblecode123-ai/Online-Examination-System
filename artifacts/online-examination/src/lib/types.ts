@@ -55,6 +55,8 @@ export interface User {
   } | null;
   email_verified?: boolean;
   profile_completion_percentage?: number;
+  /** True when the teacher-created account needs a password set on first login. */
+  must_change_password?: boolean;
 }
 
 export interface LoginResponse {
@@ -122,6 +124,10 @@ export interface Exam {
   course?: { id: number; name: string; code?: string | null } | null;
   creator?: { id: number; name: string; email?: string } | null;
   instructions?: ExamInstruction[];
+  /** Real Exam lifecycle status (draft/ready/started/completed/cancelled/archived). */
+  lifecycle_status?: string | null;
+  /** When the lifecycle status was last changed. */
+  lifecycle_changed_at?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -144,6 +150,25 @@ export interface QuestionPayload {
   passage?: { id: number; title?: string | null; content?: string | null } | null;
 }
 
+// ---------------------------------------------------------------------------
+// Exam Sections
+// ---------------------------------------------------------------------------
+
+export interface SectionContent {
+  id: number;
+  exam_id: number;
+  heading_style: 'part' | 'section' | 'custom';
+  numbering_style: 'roman' | 'arabic' | 'none';
+  title: string;
+  instructions: string | null;
+  shared_material_type: string;
+  shared_material_content: string | null;
+  media_references: string[] | null;
+  order: number;
+  formatted_heading: string;
+  question_ids: number[];
+}
+
 /** GET /exams/{id}/questions (ExamController::getWithQuestions). */
 export interface ExamQuestionsResponse {
   id: number;
@@ -151,6 +176,7 @@ export interface ExamQuestionsResponse {
   total_time: number;
   has_password?: boolean;
   questions: QuestionPayload[];
+  sections?: SectionContent[];
   limit_info?: {
     allowed?: number;
     total?: number;
@@ -165,6 +191,7 @@ export interface RealAttemptQuestionsResponse {
   exam_id: number;
   attempt_id: number;
   questions: QuestionPayload[];
+  sections?: SectionContent[];
 }
 
 // ---------------------------------------------------------------------------

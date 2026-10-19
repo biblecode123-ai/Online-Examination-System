@@ -103,13 +103,13 @@ export function Dashboard() {
     states.filter((item) => item.state === state).length;
   const completedCount = count('Completed');
   const inProgressCount = count('In Progress');
+  const readyCount = count('Ready');
+  const upcomingCount = count('Upcoming');
+  const availableCount = count('Available');
 
   const nextExam = states
-    .filter((item) => ['Available', 'In Progress', 'Upcoming'].includes(item.state))
+    .filter((item) => item.state === 'Available' || item.state === 'In Progress')
     .sort((a, b) => {
-      const order: Record<string, number> = { 'In Progress': 0, Available: 1, Upcoming: 2 };
-      const rank = order[a.state] - order[b.state];
-      if (rank !== 0) return rank;
       return (
         Date.parse(a.exam.active_from ?? '2999-01-01') -
         Date.parse(b.exam.active_from ?? '2999-01-01')
@@ -117,7 +117,7 @@ export function Dashboard() {
     })[0];
 
   const schedule = states
-    .filter((item) => ['Upcoming', 'Available', 'In Progress'].includes(item.state))
+    .filter((item) => item.state === 'Available' || item.state === 'Ready')
     .sort(
       (a, b) =>
         Date.parse(a.exam.active_from ?? '2999-01-01') -

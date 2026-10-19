@@ -68,6 +68,18 @@ export const authApi = {
       /* the local session is cleared regardless */
     }
   },
+
+  /**
+   * POST /v1/change-password — requires the current password. After a
+   * successful call the backend clears `must_change_password`, so the
+   * student portal can unblock exam access.
+   */
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    await apiRequest('/v1/change-password', {
+      method: 'POST',
+      body: { current_password: currentPassword, password: newPassword, password_confirmation: newPassword },
+    });
+  },
 };
 
 // ---------------------------------------------------------------------------
