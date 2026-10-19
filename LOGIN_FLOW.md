@@ -17,9 +17,9 @@ The Online Examination System uses the production backend at `https://2019api.of
 
 ## CORS Proxy
 
-The production backend does not allow CORS requests from Vercel. To solve this, a Vercel Edge Function proxy is used:
+The production backend does not allow CORS requests from Vercel. To solve this, a Vercel serverless function proxy is used:
 
-- **Location**: `artifacts/online-examination/api/proxy.ts`
+- **Location**: `artifacts/online-examination/api/proxy.js`
 - **Path**: `/api/proxy`
 - **Function**: Forwards requests to production backend with CORS headers
 

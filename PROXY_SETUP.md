@@ -22,7 +22,7 @@ The proxy:
 
 ### Production (Vercel Deployment)
 
-The proxy is already configured as a Vercel Edge Function at `api/proxy.ts`. It will automatically be deployed with your Vercel deployment.
+The proxy is already configured as a Vercel serverless function at `api/proxy.js`. It will automatically be deployed with your Vercel deployment.
 
 **No additional setup needed** - the frontend automatically uses the proxy in production environment.
 
@@ -110,7 +110,7 @@ Only users with `role.slug === 'student'` can login through this portal. Other r
 
 ## Files Modified
 
-- `artifacts/online-examination/api/proxy.ts` - Vercel Edge Function proxy (new)
+- `artifacts/online-examination/api/proxy.js` - Vercel serverless function proxy (new)
 - `artifacts/online-examination/src/lib/api.ts` - Updated to use proxy in production
 - `artifacts/online-examination/vercel.json` - Added API route rewrite rule
 
