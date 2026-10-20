@@ -242,12 +242,12 @@ export const realExamApi = {
   },
 
   /** GET /real-exam-attempts/{attempt}/questions — stable per-attempt order. */
-  async questions(attemptId: number, signal?: AbortSignal): Promise<QuestionPayload[]> {
+  async questions(attemptId: number, signal?: AbortSignal): Promise<RealAttemptQuestionsResponse> {
     const envelope = await apiRequest<Envelope<RealAttemptQuestionsResponse>>(
       `/v1/real-exam-attempts/${attemptId}/questions`,
       { signal },
     );
-    return unwrap(envelope, 'Could not load the questions for this attempt.').questions;
+    return unwrap(envelope, 'Could not load the questions for this attempt.');
   },
 
   /** POST /real-exam-attempts/{attempt}/answers — idempotent upsert upstream. */

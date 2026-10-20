@@ -26,6 +26,7 @@ import { Submission } from './pages/submission';
 import { ResultsPage, ResultDetails } from './pages/results';
 import { HistoryPage } from './pages/history';
 import { Profile } from './pages/profile';
+import { RoleDashboard } from './pages/role-dashboard';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -204,7 +205,8 @@ function PortalShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => setMobileMenu(false), [location]);
 
-  const name = user?.name ?? 'Student';
+  const isStudent = user?.role_slug === 'student';
+  const name = user?.name ?? (isStudent ? 'Student' : 'Staff');
 
   return (
     <div className="app-shell">
@@ -218,12 +220,18 @@ function PortalShell({ children }: { children: React.ReactNode }) {
             <small>Madda Walabu University</small>
           </span>
         </Link>
-        <div className="nav-caption">STUDENT SPACE</div>
-        <nav className="main-nav" aria-label="Student navigation">
+        <div className="nav-caption">{isStudent ? 'STUDENT SPACE' : `${user?.role_slug?.toUpperCase() ?? 'STAFF'} SPACE`}</div>
+        <nav className="main-nav" aria-label="Portal navigation">
           <NavLink href="/dashboard" icon={<LayoutDashboard size={18} />} label="Overview" />
-          <NavLink href="/exams" icon={<FileText size={18} />} label="My examinations" />
-          <NavLink href="/results" icon={<FileCheck2 size={18} />} label="Results" />
-          <NavLink href="/history" icon={<History size={18} />} label="Attempt history" />
+          {isStudent ? (
+            <>
+              <NavLink href="/exams" icon={<FileText size={18} />} label="My examinations" />
+              <NavLink href="/results" icon={<FileCheck2 size={18} />} label="Results" />
+              <NavLink href="/history" icon={<History size={18} />} label="Attempt history" />
+            </>
+          ) : (
+            <NavLink href="/exams" icon={<FileText size={18} />} label="Examinations" />
+          )}
           <NavLink href="/profile" icon={<UserRound size={18} />} label="My profile" />
         </nav>
         <div className="sidebar-spacer" />
@@ -296,7 +304,7 @@ function PortalShell({ children }: { children: React.ReactNode }) {
 }
 
 function RouterRoot() {
-  const { status } = useAuth();
+  const { status, user } = useAuth();
   const [location, setLocation] = useLocation();
 
   useEffect(() => {
@@ -327,11 +335,13 @@ function RouterRoot() {
     );
   }
 
+  const isStudent = user?.role_slug === 'student';
+
   return (
     <PortalShell>
       <Switch>
-        <Route path="/" component={Dashboard} />
-        <Route path="/dashboard" component={Dashboard} />
+        <Route path="/" component={isStudent ? Dashboard : RoleDashboard} />
+        <Route path="/dashboard" component={isStudent ? Dashboard : RoleDashboard} />
         <Route path="/login" component={Login} />
         <Route path="/exams" component={ExamList} />
         <Route path="/exams/:examId/attempt/:attemptId" component={ExamAttempt} />

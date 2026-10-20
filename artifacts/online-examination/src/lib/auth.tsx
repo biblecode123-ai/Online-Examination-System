@@ -54,8 +54,8 @@ function cacheUser(user: User | null): void {
  * same rule on POST /v1/login, but every session accepted here is re-checked
  * so a token issued elsewhere can never open the portal.
  */
-function isStudent(user: Pick<User, 'role_slug'> | null): boolean {
-  return user?.role_slug === 'student';
+function isPortalUser(user: Pick<User, 'role_slug'> | null): boolean {
+  return user?.role_slug === 'student' || user?.role_slug === 'teacher' || user?.role_slug === 'admin';
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -92,7 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const profile = await authApi.profile();
         if (cancelled) return;
-        if (!isStudent(profile)) {
+        if (!isPortalUser(profile)) {
           applySignOut('Ofijan ExamFlow is available to student accounts only.');
           return;
         }
@@ -108,7 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Offline with a stored session: keep the cached identity, the API
           // layer will surface connectivity errors where they happen.
           const cached = readCachedUser();
-          if (!isStudent(cached)) {
+          if (!isPortalUser(cached)) {
             applySignOut('Ofijan ExamFlow is available to student accounts only.');
             return;
           }
@@ -138,7 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const result = await authApi.login(email, password);
     setToken(result.token);
     const profile = await authApi.profile();
-    if (!isStudent(profile)) {
+    if (!isPortalUser(profile)) {
       try {
         await authApi.logout(); // revoke the token server-side
       } catch {
