@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react';
-import { ChevronRight, CircleAlert, GraduationCap, Loader2, ShieldCheck } from 'lucide-react';
+import { ChevronRight, CircleAlert, GraduationCap, Loader2, ShieldCheck, User } from 'lucide-react';
 import { ApiError, apiRequest } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import { authApi } from '../lib/endpoints';
 
 export function Login() {
   const { login, notice, clearNotice } = useAuth();
@@ -12,6 +13,7 @@ export function Login() {
   const [error, setError] = useState('');
   const [forgotState, setForgotState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [forgotMessage, setForgotMessage] = useState('');
+  const [loginMode, setLoginMode] = useState<'student' | 'staff'>('student');
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -20,8 +22,19 @@ export function Login() {
     setError('');
     clearNotice();
     try {
-      await login(email.trim(), password);
-      // AuthProvider flips the session; the router redirects to the dashboard.
+      if (loginMode === 'staff') {
+        // Use staff login for admin/teacher/encoder/promoter
+        const result = await authApi.staffLogin(email.trim(), password);
+        // Set token and profile manually
+        const profile = await authApi.profile();
+        localStorage.setItem('ofijan.student.token.v1', result.token);
+        localStorage.setItem('ofijan.student.user.v1', JSON.stringify(profile));
+        // Force reload to trigger auth check
+        window.location.reload();
+      } else {
+        // Use student login
+        await login(email.trim(), password);
+      }
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 401) setError('Incorrect email or password.');
@@ -107,6 +120,23 @@ export function Login() {
           <div className="eyebrow">WELCOME BACK</div>
           <h2>Sign in to continue</h2>
           <p>Use the email address registered with your institution.</p>
+
+          <div className="login-mode-toggle">
+            <button
+              type="button"
+              className={`mode-button ${loginMode === 'student' ? 'active' : ''}`}
+              onClick={() => setLoginMode('student')}
+            >
+              <GraduationCap size={16} /> Student
+            </button>
+            <button
+              type="button"
+              className={`mode-button ${loginMode === 'staff' ? 'active' : ''}`}
+              onClick={() => setLoginMode('staff')}
+            >
+              <User size={16} /> Staff (Admin/Teacher)
+            </button>
+          </div>
 
           <label htmlFor="login-email">Email address</label>
           <input
