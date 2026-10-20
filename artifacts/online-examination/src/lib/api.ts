@@ -22,10 +22,14 @@ export const API_BASE_URL = RAW_BASE.replace(/\/+$/, '');
 /** All backend routes live under /api (see ofijan-backend/routes/api.php).
  *  In production, we use the Vercel serverless function proxy (/api/proxy)
  *  which forwards requests to the production backend.
+ *  For staff login, we bypass the proxy to avoid 405 errors.
  */
 export const API_ROOT = import.meta.env.PROD
   ? '/api/proxy'
   : `${API_BASE_URL}/api`;
+
+/** Direct API root for endpoints that bypass the proxy (e.g., staff-login) */
+export const API_ROOT_DIRECT = `${API_BASE_URL}/api`;
 
 const TOKEN_STORAGE_KEY = 'ofijan.student.token.v1';
 
@@ -134,6 +138,8 @@ export interface RequestOptions {
   timeoutMs?: number;
   /** Do not attach the bearer token (login/logout-less public routes). */
   skipAuth?: boolean;
+  /** Override the base URL for this request (e.g., bypass proxy). */
+  baseUrl?: string;
 }
 
 const DEFAULT_TIMEOUT_READ = 20_000;
@@ -162,10 +168,11 @@ export function serverNow(): number {
   return serverClock.serverMs + (Date.now() - serverClock.sampledAt);
 }
 
-function buildUrl(path: string, query?: Record<string, QueryValue>): string {
+function buildUrl(path: string, query?: Record<string, QueryValue>, baseUrl?: string): string {
+  const root = baseUrl || API_ROOT;
   // In production, API_ROOT is /api/proxy, so we append the path directly (e.g., /api/proxy/v1/login)
   // In development, API_ROOT is http://localhost:3000/api, so we append the path (e.g., http://localhost:3000/api/v1/login)
-  const url = `${API_ROOT}${path.startsWith('/') ? path : `/${path}`}`;
+  const url = `${root}${path.startsWith('/') ? path : `/${path}`}`;
   if (!query) return url;
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
@@ -237,6 +244,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     signal,
     timeoutMs = body ? DEFAULT_TIMEOUT_WRITE : DEFAULT_TIMEOUT_READ,
     skipAuth = false,
+    baseUrl,
   } = options;
 
   const headers: Record<string, string> = { Accept: 'application/json' };
@@ -249,7 +257,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
   let response: Response;
   try {
-    response = await fetch(buildUrl(path, query), {
+    response = await fetch(buildUrl(path, query, baseUrl), {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),

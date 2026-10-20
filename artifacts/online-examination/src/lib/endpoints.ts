@@ -5,7 +5,7 @@
  * `ofijan-backend/routes/api/v1/*.php` (see AUDIT.md for the full matrix).
  * No endpoint here is invented, and no function invents response fields.
  */
-import { ApiError, apiRequest } from './api';
+import { ApiError, apiRequest, API_ROOT, API_ROOT_DIRECT } from './api';
 import type {
   Attempt,
   AttemptResult,
@@ -60,6 +60,7 @@ export const authApi = {
       method: 'POST',
       body: { email, password },
       skipAuth: true,
+      baseUrl: API_ROOT_DIRECT,
     });
     return unwrap(envelope, 'Staff sign-in failed.');
   },
