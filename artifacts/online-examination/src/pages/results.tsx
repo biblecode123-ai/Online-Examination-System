@@ -252,23 +252,38 @@ export function ResultDetails() {
           <div className="eyebrow">AUTHORIZED REVIEW</div>
           <h2>Question-by-question review</h2>
           <p>Released for this examination by your institution.</p>
-          {review.map((item, index) => (
-            <div className="review-answer" key={`${item.question_id}-${index}`}>
-              <span>{String(index + 1).padStart(2, '0')}</span>
-              <div>
-                <strong>{item.question_text}</strong>
-                <small>
-                  Your response:{' '}
-                  {item.student_answer.selected_option_text ||
-                    item.student_answer.answer_text ||
-                    'No response recorded'}
-                  {' · '}
-                  Correct answer: {item.correct_answer.option_text || '—'}
-                  {item.explanation ? ` · ${item.explanation}` : ''}
-                </small>
+          {review.map((item, index) => {
+            const isCorrect = item.student_answer.answer_status === 'correct';
+            const isMissed = item.student_answer.answer_status === 'unanswered';
+            const points = item.points ?? 1;
+            return (
+              <div className={`review-answer ${isCorrect ? 'correct' : 'incorrect'} ${isMissed ? 'missed' : ''}`} key={`${item.question_id}-${index}`}>
+                <span>{String(index + 1).padStart(2, '0')}</span>
+                <div>
+                  <strong>{item.question_text}</strong>
+                  <small>
+                    Points: {points} {points === 1 ? 'point' : 'points'} · Status: <span className={isCorrect ? 'status-correct' : 'status-incorrect'}>{isCorrect ? 'Correct' : isMissed ? 'Missed' : 'Incorrect'}</span>
+                  </small>
+                  <small>
+                    Your response:{' '}
+                    {item.student_answer.selected_option_text ||
+                      item.student_answer.answer_text ||
+                      'No response recorded'}
+                  </small>
+                  {!isCorrect && (
+                    <small>
+                      Correct answer: {item.correct_answer.option_text || '—'}
+                    </small>
+                  )}
+                  {item.explanation && (
+                    <small className="explanation">
+                      Explanation: {item.explanation}
+                    </small>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </section>
       )}
 

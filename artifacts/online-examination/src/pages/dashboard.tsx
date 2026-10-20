@@ -19,6 +19,7 @@ import {
 } from '../lib/examState';
 import { useExams, useMyAttempts, useNotifications } from '../lib/queries';
 import type { Attempt, Exam } from '../lib/types';
+import { isRealExam } from '../lib/endpoints';
 
 function Stat({
   icon,
@@ -86,12 +87,14 @@ export function Dashboard() {
 
   // The backend only lets a student OPEN an exam from their own department
   // (department content) or a department-less national exam — mirror that
-  // rule for what the dashboard highlights.
+  // rule for what the dashboard highlights. Also filter to show only real exams
+  // (actual assigned examinations, not practice tests).
   const exams = allExams.filter(
     (exam) =>
-      !exam.department_id ||
-      !user?.department_id ||
-      Number(exam.department_id) === Number(user.department_id),
+      isRealExam(exam) &&
+      (!exam.department_id ||
+        !user?.department_id ||
+        Number(exam.department_id) === Number(user.department_id)),
   );
 
   const states = exams.map((exam) => ({

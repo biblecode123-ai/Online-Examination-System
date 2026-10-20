@@ -177,6 +177,10 @@ export interface ExamQuestionsResponse {
   has_password?: boolean;
   questions: QuestionPayload[];
   sections?: SectionContent[];
+  /** Exam-level instructions, already joined into one block of markup. */
+  general_instructions?: string | null;
+  /** Questions that belong to no part or section. */
+  independent_question_ids?: number[];
   limit_info?: {
     allowed?: number;
     total?: number;
@@ -192,6 +196,8 @@ export interface RealAttemptQuestionsResponse {
   attempt_id: number;
   questions: QuestionPayload[];
   sections?: SectionContent[];
+  /** Exam-level instructions, already joined into one block of markup. */
+  general_instructions?: string | null;
 }
 
 // ---------------------------------------------------------------------------

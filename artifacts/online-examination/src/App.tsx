@@ -26,6 +26,17 @@ import { Submission } from './pages/submission';
 import { ResultsPage, ResultDetails } from './pages/results';
 import { HistoryPage } from './pages/history';
 import { Profile } from './pages/profile';
+import { AdminShell } from './components/AdminShell';
+import { TeacherShell } from './components/TeacherShell';
+import { AdminDashboard } from './pages/admin/dashboard';
+import { AdminUsers } from './pages/admin/users';
+import { AdminDepartments } from './pages/admin/departments';
+import { AdminExams } from './pages/admin/exams';
+import { AdminResults } from './pages/admin/results';
+import { TeacherDashboard } from './pages/teacher/dashboard';
+import { TeacherCreateExam } from './pages/teacher/create-exam';
+import { TeacherAssignments } from './pages/teacher/assignments';
+import { TeacherGrading } from './pages/teacher/grading';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -296,13 +307,19 @@ function PortalShell({ children }: { children: React.ReactNode }) {
 }
 
 function RouterRoot() {
-  const { status } = useAuth();
+  const { status, user } = useAuth();
   const [location, setLocation] = useLocation();
 
   useEffect(() => {
     if (status === 'anonymous' && location !== '/login') setLocation('/login');
-    if (status === 'authenticated' && location === '/login') setLocation('/dashboard');
-  }, [status, location, setLocation]);
+    if (status === 'authenticated' && location === '/login') {
+      // Redirect based on role
+      const role = user?.role_slug;
+      if (role === 'admin') setLocation('/admin');
+      else if (role === 'teacher') setLocation('/teacher');
+      else setLocation('/dashboard');
+    }
+  }, [status, location, setLocation, user]);
 
   if (status === 'loading') return <LoadingSplash />;
 
@@ -317,34 +334,78 @@ function RouterRoot() {
     );
   }
 
-  const isAttemptRoute = /^\/exams\/[^/]+\/attempt\/[^/]+$/.test(location);
-  if (isAttemptRoute) {
+  const role = user?.role_slug;
+  const isAdmin = role === 'admin';
+  const isTeacher = role === 'teacher';
+  const isStudent = role === 'student';
+
+  // Admin routes
+  if (isAdmin && location.startsWith('/admin')) {
     return (
-      <Switch>
-        <Route path="/exams/:examId/attempt/:attemptId" component={ExamAttempt} />
-        <Route component={NotFound} />
-      </Switch>
+      <AdminShell>
+        <Switch>
+          <Route path="/admin" component={AdminDashboard} />
+          <Route path="/admin/users" component={AdminUsers} />
+          <Route path="/admin/departments" component={AdminDepartments} />
+          <Route path="/admin/exams" component={AdminExams} />
+          <Route path="/admin/results" component={AdminResults} />
+          <Route path="/admin/:rest*" component={AdminDashboard} />
+          <Route component={NotFound} />
+        </Switch>
+      </AdminShell>
     );
   }
 
-  return (
-    <PortalShell>
-      <Switch>
-        <Route path="/" component={Dashboard} />
-        <Route path="/dashboard" component={Dashboard} />
-        <Route path="/login" component={Login} />
-        <Route path="/exams" component={ExamList} />
-        <Route path="/exams/:examId/attempt/:attemptId" component={ExamAttempt} />
-        <Route path="/exams/:examId/submission/:attemptId" component={Submission} />
-        <Route path="/exams/:examId" component={ExamDetails} />
-        <Route path="/results" component={ResultsPage} />
-        <Route path="/results/:attemptId" component={ResultDetails} />
-        <Route path="/history" component={HistoryPage} />
-        <Route path="/profile" component={Profile} />
-        <Route component={NotFound} />
-      </Switch>
-    </PortalShell>
-  );
+  // Teacher routes
+  if (isTeacher && location.startsWith('/teacher')) {
+    return (
+      <TeacherShell>
+        <Switch>
+          <Route path="/teacher" component={TeacherDashboard} />
+          <Route path="/teacher/create" component={TeacherCreateExam} />
+          <Route path="/teacher/assignments" component={TeacherAssignments} />
+          <Route path="/teacher/grading" component={TeacherGrading} />
+          <Route path="/teacher/:rest*" component={TeacherDashboard} />
+          <Route component={NotFound} />
+        </Switch>
+      </TeacherShell>
+    );
+  }
+
+  // Student routes
+  if (isStudent) {
+    const isAttemptRoute = /^\/exams\/[^/]+\/attempt\/[^/]+$/.test(location);
+    if (isAttemptRoute) {
+      return (
+        <Switch>
+          <Route path="/exams/:examId/attempt/:attemptId" component={ExamAttempt} />
+          <Route component={NotFound} />
+        </Switch>
+      );
+    }
+
+    return (
+      <PortalShell>
+        <Switch>
+          <Route path="/" component={Dashboard} />
+          <Route path="/dashboard" component={Dashboard} />
+          <Route path="/login" component={Login} />
+          <Route path="/exams" component={ExamList} />
+          <Route path="/exams/:examId/attempt/:attemptId" component={ExamAttempt} />
+          <Route path="/exams/:examId/submission/:attemptId" component={Submission} />
+          <Route path="/exams/:examId" component={ExamDetails} />
+          <Route path="/results" component={ResultsPage} />
+          <Route path="/results/:attemptId" component={ResultDetails} />
+          <Route path="/history" component={HistoryPage} />
+          <Route path="/profile" component={Profile} />
+          <Route component={NotFound} />
+        </Switch>
+      </PortalShell>
+    );
+  }
+
+  // Fallback for unknown roles
+  return <NotFound />;
 }
 
 function App() {

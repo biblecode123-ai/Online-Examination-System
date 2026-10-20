@@ -50,12 +50,21 @@ function cacheUser(user: User | null): void {
 }
 
 /**
- * The examination portal is a student-only surface. The backend enforces the
- * same rule on POST /v1/login, but every session accepted here is re-checked
- * so a token issued elsewhere can never open the portal.
+ * Role-based routing support.
+ * The portal now supports student, teacher, and admin roles.
+ * Each role has its own dashboard and routing tree.
  */
-function isStudent(user: Pick<User, 'role_slug'> | null): boolean {
-  return user?.role_slug === 'student';
+function getRoleRoute(user: Pick<User, 'role_slug'> | null): string {
+  switch (user?.role_slug) {
+    case 'admin':
+      return '/admin';
+    case 'teacher':
+      return '/teacher';
+    case 'student':
+      return '/dashboard';
+    default:
+      return '/login';
+  }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -92,10 +101,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const profile = await authApi.profile();
         if (cancelled) return;
-        if (!isStudent(profile)) {
-          applySignOut('Ofijan ExamFlow is available to student accounts only.');
-          return;
-        }
         cacheUser(profile);
         setUser(profile);
         setMustChangePassword(Boolean(profile.must_change_password));
@@ -108,10 +113,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Offline with a stored session: keep the cached identity, the API
           // layer will surface connectivity errors where they happen.
           const cached = readCachedUser();
-          if (!isStudent(cached)) {
-            applySignOut('Ofijan ExamFlow is available to student accounts only.');
-            return;
-          }
           setUser(cached);
           setMustChangePassword(Boolean(cached?.must_change_password));
           setStatus(cached ? 'authenticated' : 'anonymous');
@@ -138,19 +139,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const result = await authApi.login(email, password);
     setToken(result.token);
     const profile = await authApi.profile();
-    if (!isStudent(profile)) {
-      try {
-        await authApi.logout(); // revoke the token server-side
-      } catch {
-        /* token cleanup is best effort — the local session is dropped below */
-      }
-      setToken(null);
-      throw new ApiError(
-        'Ofijan ExamFlow is available to student accounts only.',
-        403,
-        'http',
-      );
-    }
     cacheUser(profile);
     setUser(profile);
     setMustChangePassword(Boolean(profile.must_change_password));

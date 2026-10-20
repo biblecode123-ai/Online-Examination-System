@@ -44,7 +44,7 @@ function unwrap<T>(envelope: Envelope<T> | null | undefined, fallback: string): 
 // ---------------------------------------------------------------------------
 
 export const authApi = {
-  /** POST /v1/login — throttled 5/min by the backend. */
+  /** POST /v1/login — throttled 5/min by the backend. Student-only. */
   async login(email: string, password: string): Promise<LoginResponse> {
     const envelope = await apiRequest<Envelope<LoginResponse>>('/v1/login', {
       method: 'POST',
@@ -54,10 +54,20 @@ export const authApi = {
     return unwrap(envelope, 'Sign-in failed.');
   },
 
-  /** GET /v1/profile — the authoritative identity of the signed-in student. */
+  /** POST /v1/staff-login — throttled 5/min. For admin, teacher, encoder, promoter roles. */
+  async staffLogin(email: string, password: string): Promise<LoginResponse> {
+    const envelope = await apiRequest<Envelope<LoginResponse>>('/v1/staff-login', {
+      method: 'POST',
+      body: { email, password },
+      skipAuth: true,
+    });
+    return unwrap(envelope, 'Staff sign-in failed.');
+  },
+
+  /** GET /v1/profile — the authoritative identity of the signed-in user. */
   async profile(signal?: AbortSignal): Promise<User> {
     const envelope = await apiRequest<Envelope<{ user: User }>>('/v1/profile', { signal });
-    return unwrap(envelope, 'Could not load your student profile.').user;
+    return unwrap(envelope, 'Could not load your profile.').user;
   },
 
   /** POST /v1/logout — invalidates the current Sanctum token server-side. */
@@ -71,8 +81,7 @@ export const authApi = {
 
   /**
    * POST /v1/change-password — requires the current password. After a
-   * successful call the backend clears `must_change_password`, so the
-   * student portal can unblock exam access.
+   * successful call the backend clears `must_change_password`.
    */
   async changePassword(currentPassword: string, newPassword: string): Promise<void> {
     await apiRequest('/v1/change-password', {
@@ -242,12 +251,12 @@ export const realExamApi = {
   },
 
   /** GET /real-exam-attempts/{attempt}/questions — stable per-attempt order. */
-  async questions(attemptId: number, signal?: AbortSignal): Promise<QuestionPayload[]> {
+  async questions(attemptId: number, signal?: AbortSignal): Promise<RealAttemptQuestionsResponse> {
     const envelope = await apiRequest<Envelope<RealAttemptQuestionsResponse>>(
       `/v1/real-exam-attempts/${attemptId}/questions`,
       { signal },
     );
-    return unwrap(envelope, 'Could not load the questions for this attempt.').questions;
+    return unwrap(envelope, 'Could not load the questions for this attempt.');
   },
 
   /** POST /real-exam-attempts/{attempt}/answers — idempotent upsert upstream. */
@@ -323,13 +332,308 @@ export interface PortalNotification {
 }
 
 export const notificationApi = {
-  /** GET /notifications — the signed-in student's own notifications. */
+  /** GET /notifications — the signed-in user's own notifications. */
   async list(signal?: AbortSignal): Promise<PortalNotification[]> {
     const body = await apiRequest<{ data?: PortalNotification[] }>(
       '/v1/notifications',
       { query: { per_page: 8 }, signal },
     );
     return body?.data ?? [];
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Admin Dashboard
+// ---------------------------------------------------------------------------
+
+export const adminApi = {
+  /** GET /admin/bi/dashboard/summary — system overview metrics. */
+  async summary(signal?: AbortSignal): Promise<Record<string, unknown>> {
+    const envelope = await apiRequest<Envelope<Record<string, unknown>>>(
+      '/v1/admin/bi/dashboard/summary',
+      { signal },
+    );
+    return unwrap(envelope, 'Could not load admin dashboard summary.');
+  },
+
+  /** GET /admin/users — list users with filters. */
+  async listUsers(params?: {
+    role?: string;
+    active?: boolean;
+    telegram_available?: boolean;
+    page?: number;
+    perPage?: number;
+  }): Promise<Paginated<User>> {
+    const body = await apiRequest<Paginated<User>>('/v1/admin/users', {
+      query: params,
+    });
+    return body;
+  },
+
+  /** POST /admin/users — create a new user. */
+  async createUser(data: {
+    name: string;
+    email: string;
+    password: string;
+    role: string;
+    telegram_username?: string;
+    department_id?: number;
+  }): Promise<User> {
+    const envelope = await apiRequest<Envelope<{ user: User }>>('/v1/admin/users', {
+      method: 'POST',
+      body: data,
+    });
+    return unwrap(envelope, 'Could not create user.').user;
+  },
+
+  /** PUT /admin/users/{id} — update a user. */
+  async updateUser(id: number, data: {
+    name?: string;
+    email?: string;
+    role?: string;
+    telegram_username?: string;
+    department_id?: number;
+  }): Promise<User> {
+    const envelope = await apiRequest<Envelope<{ user: User }>>(`/v1/admin/users/${id}`, {
+      method: 'PUT',
+      body: data,
+    });
+    return unwrap(envelope, 'Could not update user.').user;
+  },
+
+  /** DELETE /admin/users/{id} — delete a user. */
+  async deleteUser(id: number): Promise<void> {
+    await apiRequest(`/v1/admin/users/${id}`, { method: 'DELETE' });
+  },
+
+  /** POST /admin/users/{id}/activate — activate a user. */
+  async activateUser(id: number): Promise<User> {
+    const envelope = await apiRequest<Envelope<{ user: User }>>(`/v1/admin/users/${id}/activate`, {
+      method: 'POST',
+    });
+    return unwrap(envelope, 'Could not activate user.').user;
+  },
+
+  /** POST /admin/users/{id}/deactivate — deactivate a user. */
+  async deactivateUser(id: number): Promise<User> {
+    const envelope = await apiRequest<Envelope<{ user: User }>>(`/v1/admin/users/${id}/deactivate`, {
+      method: 'POST',
+    });
+    return unwrap(envelope, 'Could not deactivate user.').user;
+  },
+
+  /** GET /admin/results/export — export system-wide results as Excel. */
+  async exportResults(params?: {
+    exam_id?: number;
+    department_id?: number;
+    status?: string;
+    from_date?: string;
+    to_date?: string;
+  }): Promise<Blob> {
+    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/v1/admin/results/export`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${localStorage.getItem('ofijan.student.token.v1')}`,
+      },
+    });
+    if (!response.ok) throw new ApiError('Failed to export results', response.status, 'http');
+    return response.blob();
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Teacher Dashboard
+// ---------------------------------------------------------------------------
+
+export const teacherApi = {
+  /** GET /teacher/real-exams — list teacher's real exams. */
+  async listRealExams(params?: {
+    page?: number;
+    perPage?: number;
+  }): Promise<Paginated<Exam>> {
+    const body = await apiRequest<Paginated<Exam>>('/v1/teacher/real-exams', {
+      query: params,
+    });
+    return body;
+  },
+
+  /** POST /teacher/real-exams — create a new real exam. */
+  async createRealExam(data: {
+    exam_title: string;
+    category_id: number;
+    department_id: number;
+    duration_minutes: number;
+    passing_percentage: number;
+    instructions?: string;
+  }): Promise<Exam> {
+    const envelope = await apiRequest<Envelope<{ exam: Exam }>>('/v1/teacher/real-exams', {
+      method: 'POST',
+      body: data,
+    });
+    return unwrap(envelope, 'Could not create exam.').exam;
+  },
+
+  /** GET /teacher/real-exams/{id} — get exam details. */
+  async getRealExam(id: number): Promise<Exam> {
+    const envelope = await apiRequest<Envelope<{ exam: Exam }>>(`/v1/teacher/real-exams/${id}`);
+    return unwrap(envelope, 'Could not load exam.').exam;
+  },
+
+  /** PATCH /teacher/real-exams/{id} — update exam. */
+  async updateRealExam(id: number, data: Partial<Exam>): Promise<Exam> {
+    const envelope = await apiRequest<Envelope<{ exam: Exam }>>(`/v1/teacher/real-exams/${id}`, {
+      method: 'PATCH',
+      body: data,
+    });
+    return unwrap(envelope, 'Could not update exam.').exam;
+  },
+
+  /** POST /teacher/real-exams/{id}/ready — set exam to ready state. */
+  async setReady(id: number): Promise<Exam> {
+    const envelope = await apiRequest<Envelope<{ exam: Exam }>>(`/v1/teacher/real-exams/${id}/ready`, {
+      method: 'POST',
+      body: {},
+    });
+    return unwrap(envelope, 'Could not set exam to ready.').exam;
+  },
+
+  /** POST /teacher/real-exams/{id}/start — start the exam. */
+  async startExam(id: number): Promise<Exam> {
+    const envelope = await apiRequest<Envelope<{ exam: Exam }>>(`/v1/teacher/real-exams/${id}/start`, {
+      method: 'POST',
+      body: {},
+    });
+    return unwrap(envelope, 'Could not start exam.').exam;
+  },
+
+  /** POST /teacher/real-exams/{id}/complete — complete the exam. */
+  async completeExam(id: number): Promise<Exam> {
+    const envelope = await apiRequest<Envelope<{ exam: Exam }>>(`/v1/teacher/real-exams/${id}/complete`, {
+      method: 'POST',
+      body: {},
+    });
+    return unwrap(envelope, 'Could not complete exam.').exam;
+  },
+
+  /** POST /teacher/real-exams/{id}/revert-to-draft — revert to draft. */
+  async revertToDraft(id: number): Promise<Exam> {
+    const envelope = await apiRequest<Envelope<{ exam: Exam }>>(`/v1/teacher/real-exams/${id}/revert-to-draft`, {
+      method: 'POST',
+      body: {},
+    });
+    return unwrap(envelope, 'Could not revert exam to draft.').exam;
+  },
+
+  /** POST /teacher/real-exams/{id}/password — set exam password. */
+  async setPassword(id: number, password: string): Promise<{ has_password: boolean }> {
+    const envelope = await apiRequest<Envelope<{ has_password: boolean }>>(`/v1/teacher/real-exams/${id}/password`, {
+      method: 'POST',
+      body: { exam_password: password },
+    });
+    return unwrap(envelope, 'Could not set exam password.');
+  },
+
+  /** GET /teacher/real-exams/{id}/attempts — get exam attempts. */
+  async getAttempts(id: number, params?: {
+    filter?: string;
+    page?: number;
+    perPage?: number;
+  }): Promise<Paginated<Attempt>> {
+    const body = await apiRequest<Paginated<Attempt>>(`/v1/teacher/real-exams/${id}/attempts`, {
+      query: params,
+    });
+    return body;
+  },
+
+  /** GET /teacher/real-exams/{id}/students — get assigned students. */
+  async getAssignedStudents(id: number, params?: {
+    page?: number;
+    perPage?: number;
+  }): Promise<Paginated<User>> {
+    const body = await apiRequest<Paginated<User>>(`/v1/teacher/real-exams/${id}/students`, {
+      query: params,
+    });
+    return body;
+  },
+
+  /** POST /teacher/real-exams/{id}/students — assign students to exam. */
+  async assignStudents(id: number, studentIds: number[]): Promise<{
+    assigned: number[];
+    skipped: Array<{ student_id: number; reason: string }>;
+    total_assigned: number;
+  }> {
+    const envelope = await apiRequest<Envelope<{
+      assigned: number[];
+      skipped: Array<{ student_id: number; reason: string }>;
+      total_assigned: number;
+    }>>(`/v1/teacher/real-exams/${id}/students`, {
+      method: 'POST',
+      body: { student_ids: studentIds },
+    });
+    return unwrap(envelope, 'Could not assign students.');
+  },
+
+  /** DELETE /teacher/real-exams/{id}/students/{studentId} — unassign student. */
+  async unassignStudent(id: number, studentId: number): Promise<void> {
+    await apiRequest(`/v1/teacher/real-exams/${id}/students/${studentId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  /** GET /teacher/departments/{departmentId}/students — get students by department. */
+  async getDepartmentStudents(departmentId: number, params?: {
+    search?: string;
+    page?: number;
+    perPage?: number;
+  }): Promise<Paginated<User>> {
+    const body = await apiRequest<Paginated<User>>(`/v1/teacher/departments/${departmentId}/students`, {
+      query: params,
+    });
+    return body;
+  },
+
+  /** POST /teacher/real-exams/{examId}/attempts/{attemptId}/grade — grade attempt. */
+  async gradeAttempt(examId: number, attemptId: number, answers: Array<{
+    question_id: number;
+    is_correct: boolean;
+    points: number;
+    grading_notes?: string;
+  }>): Promise<{
+    graded: number[];
+    skipped: Array<{ question_id: number; reason: string }>;
+    updated_score: number;
+    correct_answers: number;
+    wrong_answers: number;
+    total_points: number;
+    max_points: number;
+  }> {
+    const envelope = await apiRequest<Envelope<{
+      graded: number[];
+      skipped: Array<{ question_id: number; reason: string }>;
+      updated_score: number;
+      correct_answers: number;
+      wrong_answers: number;
+      total_points: number;
+      max_points: number;
+    }>>(`/v1/teacher/real-exams/${examId}/attempts/${attemptId}/grade`, {
+      method: 'POST',
+      body: { answers },
+    });
+    return unwrap(envelope, 'Could not grade attempt.');
+  },
+
+  /** GET /teacher/real-exams/{examId}/results/export — export exam results as Excel. */
+  async exportResults(examId: number): Promise<Blob> {
+    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/v1/teacher/real-exams/${examId}/results/export`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${localStorage.getItem('ofijan.student.token.v1')}`,
+      },
+    });
+    if (!response.ok) throw new ApiError('Failed to export results', response.status, 'http');
+    return response.blob();
   },
 };
 

@@ -24,6 +24,7 @@ import type {
   RealExamPublicSettings,
   SectionContent,
 } from '../lib/types';
+import { sanitizeHtml } from '../lib/sanitize';
 
 // ─── TYPES ──────────────────────────────────────────────────────────────
 interface SavedAnswer {
@@ -96,6 +97,8 @@ export function ExamAttempt() {
 
   // ─── ADDED: Section State for structural rendering ────────────────────
   const [sections, setSections] = useState<SectionContent[]>([]);
+  // ─── Exam-level instructions (shown once, above the first question) ──
+  const [generalInstructions, setGeneralInstructions] = useState<string | null>(null);
 
   // --- refs used by timers/listeners so callbacks never go stale ----------
   const realRef = useRef(false);
@@ -349,7 +352,8 @@ export function ExamAttempt() {
         }
 
         let questionRows: QuestionPayload[] = [];
-        let sectionData: SectionContent[] = []; // ─── REAL DATA ───
+        let sectionData: SectionContent[] = [];
+        let generalInstructions: string | null = null;
         
         let expiresAt: string | null = attemptRecord.expires_at ?? null;
         let status: 'active' | 'locked' | 'ended' = 'active';
@@ -375,13 +379,15 @@ export function ExamAttempt() {
           // ─── FETCH QUESTIONS AND SECTIONS ────────────────────────────────
           const res = await realExamApi.questions(Number(attemptId), controller.signal);
           if (cancelled) return;
-          
+
           questionRows = res.questions ?? [];
           sectionData = res.sections ?? [];
+          generalInstructions = res.general_instructions ?? null;
         } else {
           const payload = await examApi.questions(examId, controller.signal);
           questionRows = payload.questions ?? [];
           sectionData = payload.sections ?? [];
+          generalInstructions = payload.general_instructions ?? null;
         }
 
         // Restore server-saved answers (option choices); text answers fall
@@ -405,6 +411,7 @@ export function ExamAttempt() {
         setAnswers(restored);
         setQuestions(questionRows);
         setSections(sectionData); // ─── SET SECTION DATA ──────────────────
+        setGeneralInstructions(generalInstructions);
         setSettings(publicSettings);
         settingsRef.current = publicSettings;
         warnAtRef.current = publicSettings?.escalation_warn_at ?? null;
@@ -415,8 +422,10 @@ export function ExamAttempt() {
         setSaveState('saved');
         setPhase('ready');
 
+        // Request fullscreen for all exams (both real and standard) to ensure exam integrity
+        void requestFullscreen();
+
         if (real) {
-          if (publicSettings?.fullscreen_required) void requestFullscreen();
           void reportEvent('PAGE_REFRESH', { resumed: true });
         }
       } catch (err) {
@@ -499,8 +508,10 @@ export function ExamAttempt() {
     const onFullscreen = () => {
       const active = Boolean(document.fullscreenElement);
       setIsFullscreen(active);
-      if (!active && settingsRef.current?.fullscreen_required) {
-        void reportEvent('FULLSCREEN_EXITED');
+      if (!active) {
+        if (realRef.current) {
+          void reportEvent('FULLSCREEN_EXITED');
+        }
         setBanner('You left full screen. Return to full screen to continue in exam mode.');
       }
     };
@@ -870,19 +881,31 @@ export function ExamAttempt() {
         </aside>
 
         <section className="question-stage">
+          {/* ─── Exam-level instructions (once, before the first question) ── */}
+          {generalInstructions && current === 0 && (
+            <div className="section-header exam-general-instructions">
+              <h3>Instructions</h3>
+              <div
+                className="section-instructions"
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(generalInstructions) }}
+              />
+            </div>
+          )}
+
           {/* ─── Section Header Rendering ────────────────────────── */}
           {currentSection && (
             <div className="section-header">
               <h3>{currentSection.formatted_heading}</h3>
               {currentSection.instructions && (
-                <div className="section-instructions">
-                  <p>{currentSection.instructions}</p>
-                </div>
+                <div
+                  className="section-instructions"
+                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(currentSection.instructions) }}
+                />
               )}
               {currentSection.shared_material_content && (
                 <div 
                   className="shared-material"
-                  dangerouslySetInnerHTML={{ __html: currentSection.shared_material_content }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(currentSection.shared_material_content) }}
                 />
               )}
             </div>

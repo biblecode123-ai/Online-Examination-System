@@ -121,7 +121,7 @@ export function ExamList() {
 
       <div className="filter-bar">
         <span>
-          <FileText size={17} /> {total ?? visibleExams.length} examinations match your account
+          <FileText size={17} /> {visibleExams.length} real examinations match your account
         </span>
         <label className="search-box">
           <span className="sr-only">Search examinations</span>

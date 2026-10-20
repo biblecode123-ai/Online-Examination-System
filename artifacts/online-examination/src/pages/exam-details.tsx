@@ -23,6 +23,7 @@ import {
   stateTone,
 } from '../lib/examState';
 import { attemptApi, isRealExam, pickMode, realExamApi } from '../lib/endpoints';
+import { sanitizeHtml } from '../lib/sanitize';
 import { useExam, useMyAttempts } from '../lib/queries';
 
 interface StandardStartBody {
@@ -156,21 +157,7 @@ export function ExamDetails() {
     );
   }
 
-  if (exam && !isRealExam(exam)) {
-    return (
-      <>
-        <div className="back-row">
-          <Link href="/exams" className="text-link" data-testid="link-back-exams">
-            <ChevronLeft size={16} /> My examinations
-          </Link>
-        </div>
-        <ErrorBox error="This examination is not a real (proctored) exam and cannot be opened here." />
-        <div className="back-row">
-          <Link href="/exams" className="text-link">My examinations</Link>
-        </div>
-      </>
-    );
-  }
+
 
   const startLabel = resumable
     ? 'Resume assessment'
@@ -228,7 +215,11 @@ export function ExamDetails() {
                 {instructions.map((item, index) => (
                   <li key={`${index}-${item.slice(0, 24)}`}>
                     <span>{String(index + 1).padStart(2, '0')}</span>
-                    {item}
+                    {/* The instructions are authored as rich text in the CMS. */}
+                    <div
+                      className="instruction-content"
+                      dangerouslySetInnerHTML={{ __html: sanitizeHtml(item) }}
+                    />
                   </li>
                 ))}
               </ol>
