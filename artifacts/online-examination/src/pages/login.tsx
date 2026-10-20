@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { ChevronRight, CircleAlert, GraduationCap, Loader2, ShieldCheck, User } from 'lucide-react';
+import { ChevronRight, CircleAlert, GraduationCap, Loader2, ShieldCheck } from 'lucide-react';
 import { ApiError, apiRequest } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { authApi } from '../lib/endpoints';
@@ -13,7 +13,6 @@ export function Login() {
   const [error, setError] = useState('');
   const [forgotState, setForgotState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [forgotMessage, setForgotMessage] = useState('');
-  const [loginMode, setLoginMode] = useState<'student' | 'staff'>('student');
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -22,28 +21,43 @@ export function Login() {
     setError('');
     clearNotice();
     try {
-      if (loginMode === 'staff') {
-        // Use staff login for admin/teacher/encoder/promoter
-        const result = await authApi.staffLogin(email.trim(), password);
-        // Set token and profile manually
-        const profile = await authApi.profile();
-        localStorage.setItem('ofijan.student.token.v1', result.token);
-        localStorage.setItem('ofijan.student.user.v1', JSON.stringify(profile));
-        // Force reload to trigger auth check
-        window.location.reload();
-      } else {
-        // Use student login
-        await login(email.trim(), password);
-      }
+      // Try student login first
+      await login(email.trim(), password);
     } catch (err) {
       if (err instanceof ApiError) {
-        if (err.status === 401) setError('Incorrect email or password.');
-        else if (err.status === 403) setError(err.message);
-        else if (err.isRateLimited)
+        // If student login fails with 403 (wrong role), try staff login
+        if (err.status === 403 && err.message.includes('student')) {
+          try {
+            const result = await authApi.staffLogin(email.trim(), password);
+            const profile = await authApi.profile();
+            localStorage.setItem('ofijan.student.token.v1', result.token);
+            localStorage.setItem('ofijan.student.user.v1', JSON.stringify(profile));
+            window.location.reload();
+            return;
+          } catch (staffErr) {
+            if (staffErr instanceof ApiError) {
+              if (staffErr.status === 401) setError('Incorrect email or password.');
+              else if (staffErr.status === 403) setError(staffErr.message);
+              else if (staffErr.isRateLimited)
+                setError('Too many sign-in attempts. Please wait a minute and try again.');
+              else if (staffErr.kind === 'network' || staffErr.kind === 'timeout')
+                setError('Could not reach the examination server. Check your connection and retry.');
+              else setError(staffErr.message);
+            } else {
+              setError('Sign-in failed. Please try again.');
+            }
+          }
+        } else if (err.status === 401) {
+          setError('Incorrect email or password.');
+        } else if (err.status === 403) {
+          setError(err.message);
+        } else if (err.isRateLimited) {
           setError('Too many sign-in attempts. Please wait a minute and try again.');
-        else if (err.kind === 'network' || err.kind === 'timeout')
+        } else if (err.kind === 'network' || err.kind === 'timeout') {
           setError('Could not reach the examination server. Check your connection and retry.');
-        else setError(err.message);
+        } else {
+          setError(err.message);
+        }
       } else {
         setError('Sign-in failed. Please try again.');
       }
@@ -120,23 +134,6 @@ export function Login() {
           <div className="eyebrow">WELCOME BACK</div>
           <h2>Sign in to continue</h2>
           <p>Use the email address registered with your institution.</p>
-
-          <div className="login-mode-toggle">
-            <button
-              type="button"
-              className={`mode-button ${loginMode === 'student' ? 'active' : ''}`}
-              onClick={() => setLoginMode('student')}
-            >
-              <GraduationCap size={16} /> Student
-            </button>
-            <button
-              type="button"
-              className={`mode-button ${loginMode === 'staff' ? 'active' : ''}`}
-              onClick={() => setLoginMode('staff')}
-            >
-              <User size={16} /> Staff (Admin/Teacher)
-            </button>
-          </div>
 
           <label htmlFor="login-email">Email address</label>
           <input
