@@ -41,7 +41,7 @@ import { QuestionsTab } from './questions';
 import { AssignTab } from './assign';
 import { ResultsTab } from './results';
 import { PreviewTab } from './preview';
-import type { AdminRealExamSettings } from '../../../lib/types';
+import type { AdminRealExam, AdminRealExamSettings } from '../../../lib/types';
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: <Settings2 size={15} /> },

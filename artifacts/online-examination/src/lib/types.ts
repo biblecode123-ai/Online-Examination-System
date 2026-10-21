@@ -773,3 +773,16 @@ export interface AdminExamSummary extends AdminResultsSummary {
   score_distribution: AdminScoreBucket[];
 }
 
+/** Admin department row from GET /v1/departments. */
+export interface AdminDepartmentRow {
+  id: number;
+  name: string;
+  college_id?: number | null;
+  college?: { id: number; name: string } | null;
+  exam_category_id?: number | null;
+  description?: string | null;
+  exams_count?: number;
+  questions_count?: number;
+}
+
+

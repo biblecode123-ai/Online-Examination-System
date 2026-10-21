@@ -15,10 +15,11 @@ export function AdminUsers() {
   const queryClient = useQueryClient();
 
   const { data: users, isLoading } = useQuery({
-    queryKey: ['admin-users', page, roleFilter, statusFilter],
+    queryKey: ['admin-users', page, roleFilter, statusFilter, search],
     queryFn: () => adminApi.listUsers({
       page,
       perPage: 20,
+      search: search.trim() || undefined,
       role: roleFilter || undefined,
       active: statusFilter === 'active' ? true : statusFilter === 'inactive' ? false : undefined,
     }),

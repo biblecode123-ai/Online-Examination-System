@@ -7,6 +7,7 @@
  */
 import { ApiError, apiRequest, apiBlob, API_ROOT, API_ROOT_DIRECT } from './api';
 import type {
+  AdminDepartmentRow,
   AdminExamSummary,
   AdminQuestionRow,
   AdminRealExam,
@@ -390,6 +391,7 @@ export const adminApi = {
     role?: string;
     active?: boolean;
     telegram_available?: boolean;
+    search?: string;
     page?: number;
     perPage?: number;
   }): Promise<Paginated<User>> {
@@ -561,6 +563,60 @@ export const adminApi = {
       `/v1/teacher/students/import/report/${token}`,
     );
     return unwrap(envelope, 'Could not get import report.');
+  },
+
+  /** GET /departments/list-all — list departments with stats. */
+  async listDepartments(params?: { search?: string }): Promise<AdminDepartmentRow[]> {
+    const envelope = await apiRequest<Envelope<AdminDepartmentRow[]> | AdminDepartmentRow[]>('/v1/departments/list-all', {
+      query: params,
+    });
+    if (Array.isArray(envelope)) return envelope;
+    if (Array.isArray((envelope as unknown as { data?: AdminDepartmentRow[] })?.data)) {
+      return (envelope as unknown as { data: AdminDepartmentRow[] }).data;
+    }
+    return unwrap(envelope as Envelope<AdminDepartmentRow[]>, 'Could not load departments.');
+  },
+
+  /** GET /colleges/list-all — list colleges for select inputs. */
+  async listColleges(): Promise<{ id: number; name: string }[]> {
+    const envelope = await apiRequest<Envelope<{ id: number; name: string }[]>>('/v1/colleges/list-all');
+    return unwrap(envelope, 'Could not load colleges.');
+  },
+
+  /** POST /departments — create a department. */
+  async createDepartment(data: {
+    name: string;
+    college_id: number;
+    exam_category_id: number;
+    description?: string;
+  }): Promise<AdminDepartmentRow> {
+    const envelope = await apiRequest<Envelope<AdminDepartmentRow>>('/v1/departments', {
+      method: 'POST',
+      body: data,
+    });
+    return unwrap(envelope, 'Could not create department.');
+  },
+
+  /** PUT /departments/{id} — update a department. */
+  async updateDepartment(
+    id: number,
+    data: {
+      name?: string;
+      college_id?: number;
+      exam_category_id?: number;
+      description?: string;
+    },
+  ): Promise<AdminDepartmentRow> {
+    const envelope = await apiRequest<Envelope<AdminDepartmentRow>>(`/v1/departments/${id}`, {
+      method: 'PUT',
+      body: data,
+    });
+    return unwrap(envelope, 'Could not update department.');
+  },
+
+  /** DELETE /departments/{id} — delete a department. */
+  async deleteDepartment(id: number): Promise<void> {
+    await apiRequest(`/v1/departments/${id}`, { method: 'DELETE' });
   },
 };
 
