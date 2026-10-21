@@ -32,6 +32,8 @@ import { AdminDashboard } from './pages/admin/dashboard';
 import { AdminUsers } from './pages/admin/users';
 import { AdminDepartments } from './pages/admin/departments';
 import { AdminExams } from './pages/admin/exams';
+import { AdminExamCreate } from './pages/admin/exams/create';
+import { AdminExamDetail } from './pages/admin/exams/detail';
 import { AdminResults } from './pages/admin/results';
 import { AdminResultDetail } from './pages/admin/result-detail';
 import { TeacherDashboard } from './pages/teacher/dashboard';
@@ -348,6 +350,8 @@ function RouterRoot() {
           <Route path="/admin" component={AdminDashboard} />
           <Route path="/admin/users" component={AdminUsers} />
           <Route path="/admin/departments" component={AdminDepartments} />
+          <Route path="/admin/exams/new" component={AdminExamCreate} />
+          <Route path="/admin/exams/:id" component={AdminExamDetail} />
           <Route path="/admin/exams" component={AdminExams} />
           <Route path="/admin/results" component={AdminResults} />
           <Route path="/admin/results/:attemptId" component={AdminResultDetail} />

@@ -8,6 +8,9 @@
 import { ApiError, apiRequest, apiBlob, API_ROOT, API_ROOT_DIRECT } from './api';
 import type {
   AdminExamSummary,
+  AdminQuestionRow,
+  AdminRealExam,
+  AdminRealExamSettings,
   AdminResultDetail,
   AdminResultsFilters,
   AdminResultsOptions,
@@ -15,13 +18,20 @@ import type {
   AdminResultsSummary,
   Attempt,
   AttemptResult,
+  DepartmentStudent,
   Envelope,
   EventResponse,
   Exam,
+  ExamAssignmentRow,
+  ExamAttemptRow,
   ExamQuestionsResponse,
+  ExamStructureData,
   HeartbeatData,
+  LaravelPaginator,
   LoginResponse,
   Paginated,
+  PassageRow,
+  QuestionListMeta,
   QuestionPayload,
   RealAttemptQuestionsResponse,
   RealExamPublicSettings,
@@ -784,3 +794,359 @@ export const OPTION_QUESTION_TYPES = new Set([
   'single_choice',
   'multiple',
 ]);
+
+// ---------------------------------------------------------------------------
+// Admin exam management
+//
+// Every function below was verified against the running local backend
+// (TeacherRealExamController, QuestionController, PassageController and the
+// department/category routes) by creating a real exam and inspecting the
+// exact payloads — see scripts/seed-dev-exam-fixture.mjs for the fixture.
+// The teacherApi above was written speculatively (wrong unwrap shape and
+// field names for this backend); adminExamApi is the verified contract.
+// ---------------------------------------------------------------------------
+
+export type AdminExamLifecycleAction = 'ready' | 'start' | 'complete' | 'revert-to-draft';
+
+/** Input accepted by POST/PATCH /v1/teacher/real-exams (StoreExamRequest). */
+export interface AdminExamInput {
+  exam_title?: string;
+  description?: string | null;
+  department_id?: number;
+  total_time?: number;
+  passing_percentage?: number;
+  exam_password?: string;
+  question_ids?: number[];
+  settings?: Partial<AdminRealExamSettings>;
+}
+
+/** Input accepted by POST/PUT /v1/questions (StoreQuestionRequest rules). */
+export interface AdminQuestionInput {
+  exam_id?: number;
+  question_type: string;
+  question_text: string;
+  points?: number;
+  difficulty?: string;
+  explanation?: string;
+  question_image?: string;
+  answer?: string;
+  passage_id?: number;
+  /** Backend requires BOTH question_option and option_text with the same text. */
+  options?: {
+    question_option: string;
+    option_text: string;
+    option_type: 'mc' | 'tf' | 'truefalse' | 'matching';
+    is_correct: boolean;
+  }[];
+}
+
+function unwrapPage<T>(envelope: Envelope<LaravelPaginator<T>> | null, fallback: string) {
+  const paginator = unwrap(envelope, fallback);
+  return {
+    items: paginator.data ?? [],
+    lastPage: paginator.last_page ?? 1,
+    total: paginator.total ?? (paginator.data?.length ?? 0),
+    currentPage: paginator.current_page ?? 1,
+  };
+}
+
+export const adminExamApi = {
+  /**
+   * GET /v1/teacher/real-exams — the admin passes the teacher-ownership
+   * check (TeacherRoleFilter grants admins every teacher scope), so this is
+   * the authoritative governed-exam list with attempts/assignment counts.
+   */
+  async listExams(signal?: AbortSignal): Promise<{
+    items: AdminRealExam[];
+    lastPage: number;
+    total: number;
+  }> {
+    const items: AdminRealExam[] = [];
+    let lastPage = 1;
+    let total = 0;
+    for (let page = 1; page <= 10; page += 1) {
+      const envelope = await apiRequest<Envelope<LaravelPaginator<AdminRealExam>>>(
+        '/v1/teacher/real-exams',
+        { query: { page, per_page: 100 }, signal },
+      );
+      const batch = unwrapPage(envelope, 'Could not load the examinations.');
+      items.push(...batch.items);
+      lastPage = batch.lastPage;
+      total = batch.total;
+      if (page >= lastPage) break;
+    }
+    return { items, lastPage, total };
+  },
+
+  /** GET /v1/content/exams — joins created_at/updated_at/academic_year in. */
+  async listContentMeta(signal?: AbortSignal): Promise<
+    Record<
+      number,
+      {
+        created_at?: string | null;
+        updated_at?: string | null;
+        academic_year?: string | null;
+        course_id?: number | null;
+        allowed_modes?: string[] | null;
+      }
+    >
+  > {
+    const meta: Record<number, { created_at?: string | null; updated_at?: string | null }> = {};
+    for (let page = 1; page <= 10; page += 1) {
+      const body = await apiRequest<{
+        data?: { id: number; created_at?: string | null; updated_at?: string | null }[];
+        meta?: { pagination?: { total_pages?: number } };
+      }>('/v1/content/exams', { query: { page, per_page: 100 }, signal });
+      for (const row of body?.data ?? []) {
+        meta[row.id] = { created_at: row.created_at, updated_at: row.updated_at };
+      }
+      if (page >= (body?.meta?.pagination?.total_pages ?? 1)) break;
+    }
+    return meta;
+  },
+
+  /** GET /v1/teacher/real-exams/{id} — full decorate incl. assigned_students. */
+  async showExam(id: number | string, signal?: AbortSignal): Promise<AdminRealExam> {
+    const envelope = await apiRequest<Envelope<AdminRealExam>>(`/v1/teacher/real-exams/${id}`, {
+      signal,
+    });
+    return unwrap(envelope, 'Could not load this examination.');
+  },
+
+  /** POST /v1/teacher/real-exams — always created in the draft state. */
+  async createExam(data: AdminExamInput): Promise<AdminRealExam> {
+    const envelope = await apiRequest<Envelope<AdminRealExam>>('/v1/teacher/real-exams', {
+      method: 'POST',
+      body: data,
+    });
+    return unwrap(envelope, 'Could not create the examination.');
+  },
+
+  /** PATCH /v1/teacher/real-exams/{id} — blocked server-side once started. */
+  async updateExam(id: number, data: AdminExamInput): Promise<AdminRealExam> {
+    const envelope = await apiRequest<Envelope<AdminRealExam>>(`/v1/teacher/real-exams/${id}`, {
+      method: 'PATCH',
+      body: data,
+    });
+    return unwrap(envelope, 'Could not update the examination.');
+  },
+
+  /** POST /v1/teacher/real-exams/{id}/{ready|start|complete|revert-to-draft}. */
+  async transition(
+    id: number,
+    action: AdminExamLifecycleAction,
+  ): Promise<AdminRealExam> {
+    const envelope = await apiRequest<Envelope<AdminRealExam>>(
+      `/v1/teacher/real-exams/${id}/${action}`,
+      { method: 'POST', body: {} },
+    );
+    return unwrap(envelope, `Could not ${action} the examination.`);
+  },
+
+  /** POST /v1/teacher/real-exams/{id}/password — plaintext never returned. */
+  async setExamPassword(id: number, examPassword: string): Promise<{ has_password: boolean }> {
+    const envelope = await apiRequest<Envelope<{ has_password: boolean }>>(
+      `/v1/teacher/real-exams/${id}/password`,
+      { method: 'POST', body: { exam_password: examPassword } },
+    );
+    return unwrap(envelope, 'Could not set the exam password.');
+  },
+
+  /** GET /v1/teacher/real-exams/{id}/attempts — one page of staff attempts. */
+  async listAttempts(
+    id: number,
+    params: { filter?: string; page?: number } = {},
+    signal?: AbortSignal,
+  ): Promise<{ items: ExamAttemptRow[]; lastPage: number; total: number }> {
+    const envelope = await apiRequest<Envelope<LaravelPaginator<ExamAttemptRow>>>(
+      `/v1/teacher/real-exams/${id}/attempts`,
+      { query: params, signal },
+    );
+    const page = unwrapPage(envelope, 'Could not load the attempts.');
+    return { items: page.items, lastPage: page.lastPage, total: page.total };
+  },
+
+  /** GET /v1/teacher/real-exams/{id}/students — assigned students (pivot). */
+  async listAssigned(
+    id: number,
+    page = 1,
+    signal?: AbortSignal,
+  ): Promise<{ items: ExamAssignmentRow[]; lastPage: number; total: number }> {
+    const envelope = await apiRequest<Envelope<LaravelPaginator<ExamAssignmentRow>>>(
+      `/v1/teacher/real-exams/${id}/students`,
+      { query: { page, per_page: 50 }, signal },
+    );
+    const paginator = unwrapPage(envelope, 'Could not load the assigned students.');
+    return { items: paginator.items, lastPage: paginator.lastPage, total: paginator.total };
+  },
+
+  /** POST /v1/teacher/real-exams/{id}/students — idempotent bulk assign. */
+  async assignStudents(
+    id: number,
+    studentIds: number[],
+  ): Promise<{
+    assigned: number[];
+    skipped: { student_id?: number; studentId?: number; reason?: string }[];
+    total_assigned: number;
+  }> {
+    const envelope = await apiRequest<Envelope<{
+      assigned: number[];
+      skipped: { student_id?: number; studentId?: number; reason?: string }[];
+      total_assigned: number;
+    }>>(`/v1/teacher/real-exams/${id}/students`, {
+      method: 'POST',
+      body: { student_ids: studentIds },
+    });
+    return unwrap(envelope, 'Could not assign the selected students.');
+  },
+
+  /** DELETE /v1/teacher/real-exams/{id}/students/{studentId} — pre-start only. */
+  async unassignStudent(id: number, studentId: number): Promise<void> {
+    await apiRequest(`/v1/teacher/real-exams/${id}/students/${studentId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  /** GET /v1/teacher/departments/{deptId}/students — eligible students. */
+  async departmentStudents(
+    departmentId: number,
+    params: { search?: string; page?: number; per_page?: number } = {},
+    signal?: AbortSignal,
+  ): Promise<{ items: DepartmentStudent[]; lastPage: number; total: number }> {
+    const envelope = await apiRequest<Envelope<LaravelPaginator<DepartmentStudent>>>(
+      `/v1/teacher/departments/${departmentId}/students`,
+      { query: { per_page: 50, ...params }, signal },
+    );
+    const page = unwrapPage(envelope, 'Could not load the department students.');
+    return { items: page.items, lastPage: page.lastPage, total: page.total };
+  },
+
+  /**
+   * GET /v1/questions?exam_id=X — the staff question list (QuestionResource,
+   * includes options with the answer key for admins). Custom pagination in
+   * `meta.pagination` rather than a Laravel paginator.
+   */
+  async examQuestions(
+    examId: number,
+    signal?: AbortSignal,
+  ): Promise<{ items: AdminQuestionRow[]; meta: QuestionListMeta }> {
+    const body = await apiRequest<{
+      success?: boolean;
+      message?: string;
+      data?: AdminQuestionRow[];
+      meta?: { pagination?: QuestionListMeta };
+      errors?: Record<string, string[]>;
+    }>('/v1/questions', { query: { exam_id: examId, per_page: 100 }, signal });
+    if (body?.success === false) {
+      throw new ApiError(body.message || 'Could not load the questions.', 400, 'http', undefined, body.errors);
+    }
+    return {
+      items: body?.data ?? [],
+      meta: body?.meta?.pagination ?? { current_page: 1, per_page: 100, total: body?.data?.length ?? 0, total_pages: 1 },
+    };
+  },
+
+  /** POST /v1/questions — the ExamQuestionObserver attaches it to the exam. */
+  async createQuestion(data: AdminQuestionInput): Promise<AdminQuestionRow> {
+    const envelope = await apiRequest<Envelope<AdminQuestionRow>>('/v1/questions', {
+      method: 'POST',
+      body: data,
+    });
+    return unwrap(envelope, 'Could not create the question.');
+  },
+
+  /** PUT /v1/questions/{id} — options are replaced wholesale when provided. */
+  async updateQuestion(id: number, data: AdminQuestionInput): Promise<AdminQuestionRow> {
+    const envelope = await apiRequest<Envelope<AdminQuestionRow>>(`/v1/questions/${id}`, {
+      method: 'PUT',
+      body: data,
+    });
+    return unwrap(envelope, 'Could not update the question.');
+  },
+
+  /** DELETE /v1/questions/{id} — blocked server-side once attempts exist. */
+  async deleteQuestion(id: number): Promise<void> {
+    await apiRequest(`/v1/questions/${id}`, { method: 'DELETE' });
+  },
+
+  /** POST /v1/questions/multiple — bulk import; one bad item rejects the batch. */
+  async bulkCreateQuestions(questions: AdminQuestionInput[]): Promise<AdminQuestionRow[]> {
+    const envelope = await apiRequest<Envelope<AdminQuestionRow[]>>('/v1/questions/multiple', {
+      method: 'POST',
+      body: { questions },
+    });
+    return unwrap(envelope, 'Could not import the questions.');
+  },
+
+  /** GET /v1/teacher/exams/{id}/structure — staff structure + instructions. */
+  async getStructure(
+    examId: number,
+    signal?: AbortSignal,
+  ): Promise<ExamStructureData> {
+    const envelope = await apiRequest<Envelope<ExamStructureData>>(
+      `/v1/teacher/exams/${examId}/structure`,
+      { signal },
+    );
+    return unwrap(envelope, 'Could not load the exam structure.');
+  },
+
+  /** PUT /v1/teacher/exams/{id}/structure — instructions is a plain string. */
+  async putStructure(
+    examId: number,
+    data: { instructions: string; sections: unknown[] },
+  ): Promise<ExamStructureData> {
+    const envelope = await apiRequest<Envelope<ExamStructureData>>(
+      `/v1/teacher/exams/${examId}/structure`,
+      { method: 'PUT', body: data },
+    );
+    return unwrap(envelope, 'Could not save the exam instructions.');
+  },
+
+  /** GET /v1/departments — reference list for the filters and pickers. */
+  async departments(signal?: AbortSignal): Promise<{ id: number; name: string }[]> {
+    const envelope = await apiRequest<Envelope<{ id: number; name: string }[]>>('/v1/departments', {
+      query: { per_page: 100 },
+      signal,
+    });
+    return unwrap(envelope, 'Could not load the departments.');
+  },
+
+  /** GET /v1/exam-categories — the Real Exam category is fetched, never hardcoded. */
+  async categories(signal?: AbortSignal): Promise<{ id: number; name: string; slug?: string | null }[]> {
+    const envelope = await apiRequest<Envelope<{ id: number; name: string; slug?: string | null }[]>>(
+      '/v1/exam-categories',
+      { query: { per_page: 100 }, signal },
+    );
+    return unwrap(envelope, 'Could not load the exam categories.');
+  },
+
+  /** GET /v1/passages — reusable reading passages (PassageController@index). */
+  async passages(signal?: AbortSignal): Promise<PassageRow[]> {
+    const body = await apiRequest<{ data?: PassageRow[] } | PassageRow[] | Envelope<PassageRow[]>>(
+      '/v1/passages',
+      { query: { per_page: 100 }, signal },
+    );
+    if (Array.isArray(body)) return body;
+    if (Array.isArray((body as { data?: PassageRow[] })?.data)) {
+      return (body as { data: PassageRow[] }).data;
+    }
+    return unwrap(body as Envelope<PassageRow[]>, 'Could not load the passages.');
+  },
+
+  /** POST /v1/passages — { title?, content } (PassageController::store). */
+  async createPassage(data: { title?: string; content: string }): Promise<PassageRow> {
+    const envelope = await apiRequest<Envelope<PassageRow>>('/v1/passages', {
+      method: 'POST',
+      body: data,
+    });
+    return unwrap(envelope, 'Could not create the passage.');
+  },
+
+  /**
+   * DELETE /v1/exams/{id} — the backend refuses to delete exams with attempt
+   * history; the UI additionally hides this until attempts reach zero.
+   */
+  async deleteExam(id: number): Promise<void> {
+    await apiRequest(`/v1/exams/${id}`, { method: 'DELETE' });
+  },
+};

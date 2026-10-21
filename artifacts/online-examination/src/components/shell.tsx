@@ -39,7 +39,7 @@ export function Status({
   testId,
 }: {
   children: ReactNode;
-  tone?: 'neutral' | 'green' | 'amber' | 'purple' | 'red';
+  tone?: 'neutral' | 'green' | 'amber' | 'purple' | 'red' | 'blue';
   testId?: string;
 }) {
   return (
@@ -141,6 +141,70 @@ export function LoadingBlock({ label = 'Loading…' }: { label?: string }) {
     <div className="loading-block" role="status" aria-live="polite">
       <span className="spinner" aria-hidden="true" />
       {label}
+    </div>
+  );
+}
+
+/**
+ * Confirmation dialog for destructive or irreversible operations.
+ * Renders inline (no portal) so it works anywhere in the admin pages.
+ */
+export function ConfirmDialog({
+  open,
+  title,
+  message,
+  confirmLabel = 'Confirm',
+  cancelLabel = 'Cancel',
+  tone = 'primary',
+  busy = false,
+  onConfirm,
+  onCancel,
+  testId,
+}: {
+  open: boolean;
+  title: string;
+  message: ReactNode;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  tone?: 'primary' | 'danger';
+  busy?: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+  testId?: string;
+}) {
+  if (!open) return null;
+  return (
+    <div className="dialog-scrim" role="presentation" onClick={busy ? undefined : onCancel}>
+      <div
+        className="dialog"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="confirm-dialog-title"
+        data-testid={testId ?? 'confirm-dialog'}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 id="confirm-dialog-title">{title}</h3>
+        <div className="dialog-message">{message}</div>
+        <div className="dialog-actions">
+          <button
+            type="button"
+            className="button button-secondary"
+            onClick={onCancel}
+            disabled={busy}
+          >
+            {cancelLabel}
+          </button>
+          <button
+            type="button"
+            className={`button button-${tone === 'danger' ? 'danger' : 'primary'}`}
+            onClick={onConfirm}
+            disabled={busy}
+            data-testid="button-confirm-dialog"
+          >
+            {busy ? 'Working…' : confirmLabel}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
