@@ -1,6 +1,22 @@
 import { useQuery } from '@tanstack/react-query';
-import { attemptApi, examApi, notificationApi, type PortalNotification } from './endpoints';
-import type { Attempt, AttemptResult, Exam, ExamQuestionsResponse } from './types';
+import {
+  adminApi,
+  attemptApi,
+  examApi,
+  notificationApi,
+  type PortalNotification,
+} from './endpoints';
+import type {
+  AdminExamSummary,
+  AdminResultDetail,
+  AdminResultsFilters,
+  AdminResultsOptions,
+  AdminResultsPage,
+  Attempt,
+  AttemptResult,
+  Exam,
+  ExamQuestionsResponse,
+} from './types';
 
 /** Central query keys (single source for cache identity/invalidation). */
 export const queryKeys = {
@@ -12,6 +28,10 @@ export const queryKeys = {
   myAttempts: () => ['my-attempts'] as const,
   result: (id: string) => ['result', id] as const,
   notifications: () => ['notifications'] as const,
+  adminResults: (filters: AdminResultsFilters) => ['admin-results', filters] as const,
+  adminResultOptions: () => ['admin-result-options'] as const,
+  adminExamResults: (examId: number | null) => ['admin-exam-results', examId] as const,
+  adminResult: (id: string) => ['admin-result', id] as const,
 };
 
 const MAX_ATTEMPT_PAGES = 10;
@@ -86,6 +106,49 @@ export function useNotifications() {
     staleTime: 60_000,
     retry: 1,
   });
+}
+
+// ---------------------------------------------------------------------------
+// Administrator results
+// ---------------------------------------------------------------------------
+
+/** The filtered, paginated result list together with its summary. */
+export function useAdminResults(filters: AdminResultsFilters) {
+  return useQuery({
+    queryKey: queryKeys.adminResults(filters),
+    queryFn: ({ signal }) => adminApi.results(filters, signal),
+    placeholderData: (previous) => previous,
+  }) as ReturnType<typeof useQuery<AdminResultsPage>>;
+}
+
+/** The values the result filters can take (exams, departments, categories). */
+export function useAdminResultOptions() {
+  return useQuery({
+    queryKey: queryKeys.adminResultOptions(),
+    queryFn: ({ signal }) => adminApi.resultsOptions(signal),
+    staleTime: 300_000,
+    retry: 1,
+  }) as ReturnType<typeof useQuery<AdminResultsOptions>>;
+}
+
+/** The exam-scoped statistics, loaded only when an exam filter is active. */
+export function useAdminExamResults(examId: number | null) {
+  return useQuery({
+    queryKey: queryKeys.adminExamResults(examId),
+    queryFn: ({ signal }) => adminApi.examResults(examId as number, signal),
+    enabled: examId !== null,
+    staleTime: 60_000,
+  }) as ReturnType<typeof useQuery<AdminExamSummary>>;
+}
+
+/** The full result of a single attempt, including the question review. */
+export function useAdminResult(attemptId: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.adminResult(attemptId ?? ''),
+    queryFn: ({ signal }) => adminApi.result(Number(attemptId), signal),
+    enabled: Boolean(attemptId),
+    retry: false,
+  }) as ReturnType<typeof useQuery<AdminResultDetail>>;
 }
 
 export type { PortalNotification };

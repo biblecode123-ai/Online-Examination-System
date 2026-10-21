@@ -248,7 +248,10 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   } = options;
 
   const headers: Record<string, string> = { Accept: 'application/json' };
-  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  // A FormData body must be sent as-is so the browser can set the multipart
+  // boundary; everything else is JSON.
+  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
+  if (body !== undefined && !isFormData) headers['Content-Type'] = 'application/json';
 
   const token = skipAuth ? null : getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -260,7 +263,8 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     response = await fetch(buildUrl(path, query, baseUrl), {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body:
+        body === undefined ? undefined : isFormData ? (body as FormData) : JSON.stringify(body),
       signal: linkedSignal,
       credentials: 'omit',
     });
@@ -315,4 +319,64 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
 
   return parsed as T;
+}
+
+/**
+ * Download a binary payload (an Excel export) from the Ofijan backend.
+ *
+ * `apiRequest` parses JSON, so binary responses need their own path. This
+ * helper still goes through the same base URL, the same bearer token and the
+ * same timeout/Abort handling as every other call.
+ */
+export async function apiBlob(
+  path: string,
+  options: { query?: Record<string, QueryValue>; signal?: AbortSignal; timeoutMs?: number } = {},
+): Promise<Blob> {
+  const { query, signal, timeoutMs = 120_000 } = options;
+
+  const headers: Record<string, string> = { Accept: '*/*' };
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const { signal: linkedSignal, cleanup, timedOut } = linkSignals(signal, timeoutMs);
+
+  let response: Response;
+  try {
+    response = await fetch(buildUrl(path, query), {
+      method: 'GET',
+      headers,
+      signal: linkedSignal,
+      credentials: 'omit',
+    });
+  } catch (error) {
+    cleanup();
+    if (timedOut()) {
+      throw new ApiError('The export took too long to download. Please try again.', 0, 'timeout');
+    }
+    if ((error as Error)?.name === 'AbortError') throw error;
+    throw new ApiError(
+      'Could not reach the examination server. Check your connection and retry.',
+      0,
+      'network',
+    );
+  }
+  cleanup();
+
+  if (!response.ok) {
+    const parsed = await parseBody(response);
+    if (response.status === 401) {
+      setToken(null);
+      broadcastSessionExpired();
+    }
+    throw new ApiError(
+      messageFromBody(parsed, `The export failed (HTTP ${response.status}).`),
+      response.status,
+      'http',
+      undefined,
+      undefined,
+      parsed,
+    );
+  }
+
+  return response.blob();
 }

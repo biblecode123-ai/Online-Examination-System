@@ -33,6 +33,7 @@ import { AdminUsers } from './pages/admin/users';
 import { AdminDepartments } from './pages/admin/departments';
 import { AdminExams } from './pages/admin/exams';
 import { AdminResults } from './pages/admin/results';
+import { AdminResultDetail } from './pages/admin/result-detail';
 import { TeacherDashboard } from './pages/teacher/dashboard';
 import { TeacherCreateExam } from './pages/teacher/create-exam';
 import { TeacherAssignments } from './pages/teacher/assignments';
@@ -349,6 +350,7 @@ function RouterRoot() {
           <Route path="/admin/departments" component={AdminDepartments} />
           <Route path="/admin/exams" component={AdminExams} />
           <Route path="/admin/results" component={AdminResults} />
+          <Route path="/admin/results/:attemptId" component={AdminResultDetail} />
           <Route path="/admin/profile" component={Profile} />
           <Route path="/admin/:rest*" component={AdminDashboard} />
           <Route component={NotFound} />

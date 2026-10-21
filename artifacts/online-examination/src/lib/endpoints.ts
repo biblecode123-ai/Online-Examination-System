@@ -5,8 +5,14 @@
  * `ofijan-backend/routes/api/v1/*.php` (see AUDIT.md for the full matrix).
  * No endpoint here is invented, and no function invents response fields.
  */
-import { ApiError, apiRequest, API_ROOT, API_ROOT_DIRECT } from './api';
+import { ApiError, apiRequest, apiBlob, API_ROOT, API_ROOT_DIRECT } from './api';
 import type {
+  AdminExamSummary,
+  AdminResultDetail,
+  AdminResultsFilters,
+  AdminResultsOptions,
+  AdminResultsPage,
+  AdminResultsSummary,
   Attempt,
   AttemptResult,
   Envelope,
@@ -26,6 +32,7 @@ import type {
   User,
   VerifyPasswordResponse,
 } from './types';
+import type { QueryValue } from './api';
 
 /** Unwrap a BaseController envelope, turning failures into typed errors. */
 function unwrap<T>(envelope: Envelope<T> | null | undefined, fallback: string): T {
@@ -37,6 +44,17 @@ function unwrap<T>(envelope: Envelope<T> | null | undefined, fallback: string): 
     throw new ApiError(envelope.message || fallback, 502, 'parse');
   }
   return envelope.data;
+}
+
+/** Drop the empty filter values so the backend receives a clean query string. */
+function toQuery(filters?: AdminResultsFilters): Record<string, QueryValue> {
+  const query: Record<string, QueryValue> = {};
+  if (!filters) return query;
+  for (const [key, value] of Object.entries(filters)) {
+    if (value === null || value === undefined || value === '') continue;
+    query[key] = value as QueryValue;
+  }
+  return query;
 }
 
 // ---------------------------------------------------------------------------
@@ -423,23 +441,116 @@ export const adminApi = {
     return unwrap(envelope, 'Could not deactivate user.').user;
   },
 
-  /** GET /admin/results/export — export system-wide results as Excel. */
-  async exportResults(params?: {
-    exam_id?: number;
-    department_id?: number;
-    status?: string;
-    from_date?: string;
-    to_date?: string;
-  }): Promise<Blob> {
-    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/v1/admin/results/export`, {
+  /**
+   * GET /admin/results — the filtered, paginated system-wide result list.
+   *
+   * The server applies every filter, orders the rows and returns the summary
+   * of exactly the same set, so the cards and the table can never disagree.
+   */
+  async results(
+    filters?: AdminResultsFilters,
+    signal?: AbortSignal,
+  ): Promise<AdminResultsPage> {
+    const envelope = await apiRequest<Envelope<AdminResultsPage>>('/v1/admin/results', {
+      query: toQuery(filters),
+      signal,
+    });
+    return unwrap(envelope, 'Could not load the examination results.');
+  },
+
+  /** GET /admin/results/summary — the summary cards for the same filters. */
+  async resultsSummary(
+    filters?: AdminResultsFilters,
+    signal?: AbortSignal,
+  ): Promise<AdminResultsSummary> {
+    const envelope = await apiRequest<Envelope<AdminResultsSummary>>('/v1/admin/results/summary', {
+      query: toQuery(filters),
+      signal,
+    });
+    return unwrap(envelope, 'Could not load the results summary.');
+  },
+
+  /** GET /admin/results/options — the exams, departments and categories. */
+  async resultsOptions(signal?: AbortSignal): Promise<AdminResultsOptions> {
+    const envelope = await apiRequest<Envelope<AdminResultsOptions>>('/v1/admin/results/options', {
+      signal,
+    });
+    return unwrap(envelope, 'Could not load the result filters.');
+  },
+
+  /** GET /admin/results/exams/{exam} — the exam-scoped result statistics. */
+  async examResults(examId: number, signal?: AbortSignal): Promise<AdminExamSummary> {
+    const envelope = await apiRequest<Envelope<AdminExamSummary>>(
+      `/v1/admin/results/exams/${examId}`,
+      { signal },
+    );
+    return unwrap(envelope, 'Could not load the examination statistics.');
+  },
+
+  /** GET /admin/results/{attempt} — the full result of a single attempt. */
+  async result(attemptId: number, signal?: AbortSignal): Promise<AdminResultDetail> {
+    const envelope = await apiRequest<Envelope<AdminResultDetail>>(
+      `/v1/admin/results/${attemptId}`,
+      { signal },
+    );
+    return unwrap(envelope, 'Could not load this result.');
+  },
+
+  /**
+   * GET /admin/results/export — export the filtered results as Excel.
+   *
+   * The export honours exactly the same filters as the table, so the file
+   * always matches what the administrator is looking at.
+   */
+  async exportResults(filters?: AdminResultsFilters): Promise<Blob> {
+    return apiBlob('/v1/admin/results/export', { query: toQuery(filters) });
+  },
+
+  /** GET /teacher/students/import-template — download Excel import template. */
+  async downloadImportTemplate(): Promise<Blob> {
+    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/v1/teacher/students/import-template`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${localStorage.getItem('ofijan.student.token.v1')}`,
       },
     });
-    if (!response.ok) throw new ApiError('Failed to export results', response.status, 'http');
+    if (!response.ok) throw new ApiError('Failed to download template', response.status, 'http');
     return response.blob();
+  },
+
+  /** POST /teacher/students/import/preview — preview bulk import with validation. */
+  async previewImport(file: File): Promise<Record<string, unknown>> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const envelope = await apiRequest<Envelope<Record<string, unknown>>>(
+      '/v1/teacher/students/import/preview',
+      {
+        method: 'POST',
+        body: formData,
+      },
+    );
+    return unwrap(envelope, 'Could not preview import.');
+  },
+
+  /** POST /teacher/students/import/confirm — confirm bulk import. */
+  async confirmImport(token: string): Promise<Record<string, unknown>> {
+    const envelope = await apiRequest<Envelope<Record<string, unknown>>>(
+      '/v1/teacher/students/import/confirm',
+      {
+        method: 'POST',
+        body: { token },
+      },
+    );
+    return unwrap(envelope, 'Could not confirm import.');
+  },
+
+  /** GET /teacher/students/import/report/{token} — get import report. */
+  async getImportReport(token: string): Promise<Record<string, unknown>> {
+    const envelope = await apiRequest<Envelope<Record<string, unknown>>>(
+      `/v1/teacher/students/import/report/${token}`,
+    );
+    return unwrap(envelope, 'Could not get import report.');
   },
 };
 
@@ -633,15 +744,7 @@ export const teacherApi = {
 
   /** GET /teacher/real-exams/{examId}/results/export — export exam results as Excel. */
   async exportResults(examId: number): Promise<Blob> {
-    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/v1/teacher/real-exams/${examId}/results/export`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${localStorage.getItem('ofijan.student.token.v1')}`,
-      },
-    });
-    if (!response.ok) throw new ApiError('Failed to export results', response.status, 'http');
-    return response.blob();
+    return apiBlob(`/v1/teacher/real-exams/${examId}/results/export`);
   },
 };
 

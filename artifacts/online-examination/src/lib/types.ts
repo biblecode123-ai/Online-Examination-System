@@ -404,3 +404,195 @@ export interface ResultQuestionReview {
   options: { id: number; text: string; is_correct?: boolean }[];
   explanation?: string | null;
 }
+
+// ---------------------------------------------------------------------------
+// Administrator results (App\Services\AdminResultsService)
+// ---------------------------------------------------------------------------
+
+/** The official academic outcome of a finished attempt. */
+export type AdminResultOutcome = 'passed' | 'failed' | 'pending';
+
+/** How far the grading of an attempt has progressed. */
+export type AdminGradingStatus = 'automatic' | 'pending_review' | 'reviewed';
+
+/** Columns the server may order the result list by. */
+export type AdminResultSort = 'started_at' | 'completed_at' | 'score' | 'student' | 'exam';
+
+/**
+ * The filter set shared by the result table, the summary cards and the
+ * Excel export — every one of them is applied by the server.
+ */
+export interface AdminResultsFilters {
+  search?: string;
+  student_id?: number;
+  exam_id?: number;
+  department_id?: number;
+  category_id?: number;
+  status?: string;
+  outcome?: AdminResultOutcome;
+  from_date?: string;
+  to_date?: string;
+  min_score?: number;
+  max_score?: number;
+  sort?: AdminResultSort;
+  direction?: 'asc' | 'desc';
+  page?: number;
+  per_page?: number;
+}
+
+export interface AdminResultStudent {
+  id: number;
+  name: string | null;
+  email: string | null;
+  phone_number: string | null;
+  department_id: number | null;
+  department_name: string | null;
+}
+
+export interface AdminResultExam {
+  id: number;
+  title: string | null;
+  category_id: number | null;
+  category_name: string | null;
+  department_id: number | null;
+  department_name: string | null;
+  duration_minutes: number | null;
+  passing_percentage: number | null;
+  lifecycle_status: string | null;
+  active_from: string | null;
+  active_until: string | null;
+}
+
+/**
+ * One examination attempt, as the server computed it.
+ *
+ * `marks_obtained`, `max_marks`, `score` (the percentage), `pass_mark` and
+ * `outcome` are produced by the backend — the client never recalculates them.
+ */
+export interface AdminResultRow {
+  id: number;
+  attempt_number: number;
+  student: AdminResultStudent;
+  exam: AdminResultExam;
+  mode: string | null;
+  status: string | null;
+  attempt_state: string | null;
+  auto_submitted: boolean;
+  time_expired: boolean;
+  marks_obtained: number;
+  max_marks: number | null;
+  score: number | null;
+  percentage: number | null;
+  pass_mark: number;
+  passed: boolean | null;
+  outcome: AdminResultOutcome | null;
+  grading_status: AdminGradingStatus;
+  total_questions: number | null;
+  correct_answers: number | null;
+  wrong_answers: number | null;
+  skipped_answers: number | null;
+  violation_count: number;
+  start_time: string | null;
+  end_time: string | null;
+  completed_at: string | null;
+  auto_submitted_at: string | null;
+  time_taken_seconds: number | null;
+}
+
+/** Summary statistics for the filtered attempt set. */
+export interface AdminResultsSummary {
+  total_attempts: number;
+  unique_students: number;
+  completed_attempts: number;
+  in_progress_attempts: number;
+  submitted_attempts: number;
+  auto_submitted_attempts: number;
+  passed_attempts: number;
+  failed_attempts: number;
+  pending_evaluation_attempts: number;
+  average_score: number | null;
+  graded_outcomes: number;
+  pass_rate: number | null;
+}
+
+/** GET /admin/results — one page of results plus the matching summary. */
+export interface AdminResultsPage {
+  results: AdminResultRow[];
+  current_page: number;
+  per_page: number;
+  total: number;
+  last_page: number;
+  summary: AdminResultsSummary;
+}
+
+/** GET /admin/results/options — the values the filters can take. */
+export interface AdminResultsOptions {
+  exams: { id: number; title: string }[];
+  departments: { id: number; name: string }[];
+  categories: { id: number; name: string }[];
+}
+
+export interface AdminQuestionOption {
+  id: number;
+  text: string;
+  is_correct: boolean;
+}
+
+/** The administrator's question-by-question view of an attempt. */
+export interface AdminQuestionReview {
+  question_id: number;
+  question_number: number;
+  question_text: string;
+  question_type: string;
+  question_image: string | null;
+  max_points: number;
+  awarded_points: number;
+  requires_manual_grading: boolean;
+  graded_at: string | null;
+  graded_by: number | null;
+  grading_notes: string | null;
+  student_answer: {
+    selected_option_id: number | null;
+    selected_option_text: string | null;
+    answer_text: string | null;
+    is_correct: boolean | null;
+    time_spent_seconds: number | null;
+    answered_at: string | null;
+    answer_status: 'correct' | 'incorrect' | 'unanswered';
+  };
+  correct_answer: { option_id: number | null; option_text: string | null };
+  options: AdminQuestionOption[];
+  explanation: string | null;
+}
+
+/** GET /admin/results/{attempt} — the full result of one attempt. */
+export interface AdminResultDetail {
+  result: AdminResultRow;
+  question_review: AdminQuestionReview[];
+}
+
+export interface AdminScoreBucket {
+  label: string;
+  min: number;
+  max: number;
+  count: number;
+}
+
+/** GET /admin/results/exams/{exam} — the exam-scoped result statistics. */
+export interface AdminExamSummary extends AdminResultsSummary {
+  exam: {
+    id: number;
+    title: string | null;
+    category_name: string | null;
+    department_name: string | null;
+    duration_minutes: number | null;
+    passing_percentage: number | null;
+    lifecycle_status: string | null;
+  };
+  assigned_students: number;
+  students_started: number;
+  students_not_attempted: number;
+  attempts: number;
+  score_distribution: AdminScoreBucket[];
+}
+
