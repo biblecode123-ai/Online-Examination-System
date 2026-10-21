@@ -89,11 +89,16 @@ export function Profile() {
     }
   }
 
+  // The profile page is shared by every role (student, teacher, admin), so
+  // the eyebrow follows the signed-in user's role instead of hard-coding
+  // "STUDENT" — the teacher/admin shells route here too.
+  const accountEyebrow = `${(user?.role ?? 'Student').toUpperCase()} ACCOUNT`;
+
   if (!user) {
     return (
       <>
-        <PageTitle eyebrow="STUDENT ACCOUNT" title="My profile" detail="Loading your record…" />
-        <ErrorBox error={refreshError || 'Loading your student profile from the server…'} onRetry={() => void onRefresh()} />
+        <PageTitle eyebrow={accountEyebrow} title="My profile" detail="Loading your record…" />
+        <ErrorBox error={refreshError || 'Loading your profile from the server…'} onRetry={() => void onRefresh()} />
       </>
     );
   }
@@ -105,9 +110,9 @@ export function Profile() {
   return (
     <>
       <PageTitle
-        eyebrow="STUDENT ACCOUNT"
+        eyebrow={accountEyebrow}
         title="My profile"
-        detail="Identity details as recorded by the Ofijan student information system."
+        detail="Identity details as recorded by the Ofijan university information system."
         action={
           <button
             type="button"
@@ -169,7 +174,7 @@ export function Profile() {
           <div className="eyebrow">SERVER-VERIFIED IDENTITY</div>
           <h3>Read-only record</h3>
           <p>
-            These fields come from the student information system. Examination eligibility,
+            These fields come from the university information system. Examination eligibility,
             department restrictions and attempt limits are checked against this record on the
             server.
           </p>

@@ -29,8 +29,11 @@ export function Login() {
         if (err.status === 403 && err.message.includes('student')) {
           try {
             const result = await authApi.staffLogin(email.trim(), password);
-            const profile = await authApi.profile();
+            // Persist the staff token BEFORE fetching the profile: /v1/profile
+            // is auth:sanctum, so reading it with the old (or absent) token
+            // 401s and signs the member straight back out.
             localStorage.setItem('ofijan.student.token.v1', result.token);
+            const profile = await authApi.profile();
             localStorage.setItem('ofijan.student.user.v1', JSON.stringify(profile));
             window.location.reload();
             return;

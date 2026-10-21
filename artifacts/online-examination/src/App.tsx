@@ -349,6 +349,7 @@ function RouterRoot() {
           <Route path="/admin/departments" component={AdminDepartments} />
           <Route path="/admin/exams" component={AdminExams} />
           <Route path="/admin/results" component={AdminResults} />
+          <Route path="/admin/profile" component={Profile} />
           <Route path="/admin/:rest*" component={AdminDashboard} />
           <Route component={NotFound} />
         </Switch>
@@ -365,6 +366,7 @@ function RouterRoot() {
           <Route path="/teacher/create" component={TeacherCreateExam} />
           <Route path="/teacher/assignments" component={TeacherAssignments} />
           <Route path="/teacher/grading" component={TeacherGrading} />
+          <Route path="/teacher/profile" component={Profile} />
           <Route path="/teacher/:rest*" component={TeacherDashboard} />
           <Route component={NotFound} />
         </Switch>

@@ -453,10 +453,17 @@ export const teacherApi = {
     page?: number;
     perPage?: number;
   }): Promise<Paginated<Exam>> {
-    const body = await apiRequest<Paginated<Exam>>('/v1/teacher/real-exams', {
-      query: params,
-    });
-    return body;
+    // The backend wraps the paginator in the standard envelope
+    // ({ success, data: { data: [...], ... } }), so unwrap first — returning
+    // the raw body made `exams.data` the paginator object rather than the
+    // exam array and crashed the teacher pages on `.map`.
+    const envelope = await apiRequest<Envelope<Paginated<Exam>>>(
+      '/v1/teacher/real-exams',
+      {
+        query: params,
+      },
+    );
+    return unwrap(envelope, 'Could not load your exams.');
   },
 
   /** POST /teacher/real-exams — create a new real exam. */
