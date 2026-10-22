@@ -13,17 +13,24 @@ import {
   AlertCircle,
   CheckCircle2,
   X,
+  ChevronLeft,
+  ChevronRight,
+  Filter,
+  MoreVertical,
+  RefreshCw,
 } from 'lucide-react';
 import type { AdminDepartmentRow } from '../../lib/types';
 
 export function AdminDepartments() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingDepartment, setEditingDepartment] = useState<AdminDepartmentRow | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AdminDepartmentRow | null>(null);
   const [formError, setFormError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [selectedCollege, setSelectedCollege] = useState<number | null>(null);
 
   // Form state
   const [name, setName] = useState('');
@@ -31,10 +38,10 @@ export function AdminDepartments() {
   const [categoryId, setCategoryId] = useState<number>(0);
   const [description, setDescription] = useState('');
 
-  // 1. Fetch departments
+  // 1. Fetch departments with pagination
   const departmentsQuery = useQuery({
-    queryKey: ['admin-departments'],
-    queryFn: () => adminApi.listDepartments(),
+    queryKey: ['admin-departments', page, search, selectedCollege],
+    queryFn: () => adminApi.listDepartments({ page, search: search || undefined }),
   });
 
   // 2. Fetch colleges
@@ -51,19 +58,22 @@ export function AdminDepartments() {
     staleTime: 5 * 60_000,
   });
 
-  const departments = departmentsQuery.data ?? [];
+  const departments = departmentsQuery.data?.items ?? [];
+  const lastPage = departmentsQuery.data?.lastPage ?? 1;
+  const total = departmentsQuery.data?.total ?? 0;
   const colleges = collegesQuery.data ?? [];
   const categories = categoriesQuery.data ?? [];
 
+  // Reset to page 1 when search or filter changes
+  useMemo(() => {
+    setPage(1);
+  }, [search, selectedCollege]);
+
+  // Filter departments client-side by college if needed
   const filteredDepartments = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return departments;
-    return departments.filter(
-      (d) =>
-        d.name.toLowerCase().includes(q) ||
-        (d.college?.name && d.college.name.toLowerCase().includes(q)),
-    );
-  }, [departments, search]);
+    if (!selectedCollege) return departments;
+    return departments.filter(d => d.college_id === selectedCollege);
+  }, [departments, selectedCollege]);
 
   const openCreateModal = () => {
     setEditingDepartment(null);
@@ -83,6 +93,10 @@ export function AdminDepartments() {
     setDescription(dept.description ?? '');
     setFormError('');
     setModalOpen(true);
+  };
+
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage);
   };
 
   // Mutations
@@ -163,104 +177,339 @@ export function AdminDepartments() {
         </div>
       )}
 
+      {/* Stats Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+        <div className="card" style={{ padding: '1.25rem', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <Building2 size={24} style={{ opacity: 0.9 }} />
+            <div>
+              <div style={{ fontSize: '2rem', fontWeight: 700, lineHeight: 1 }}>{total}</div>
+              <div style={{ fontSize: '0.875rem', opacity: 0.9 }}>Total Departments</div>
+            </div>
+          </div>
+        </div>
+        <div className="card" style={{ padding: '1.25rem', background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', color: 'white' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <BookOpen size={24} style={{ opacity: 0.9 }} />
+            <div>
+              <div style={{ fontSize: '2rem', fontWeight: 700, lineHeight: 1 }}>
+                {departments.reduce((sum, d) => sum + (d.exams_count ?? 0), 0)}
+              </div>
+              <div style={{ fontSize: '0.875rem', opacity: 0.9 }}>Total Exams</div>
+            </div>
+          </div>
+        </div>
+        <div className="card" style={{ padding: '1.25rem', background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', color: 'white' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <HelpCircle size={24} style={{ opacity: 0.9 }} />
+            <div>
+              <div style={{ fontSize: '2rem', fontWeight: 700, lineHeight: 1 }}>
+                {departments.reduce((sum, d) => sum + (d.questions_count ?? 0), 0)}
+              </div>
+              <div style={{ fontSize: '0.875rem', opacity: 0.9 }}>Total Questions</div>
+            </div>
+          </div>
+        </div>
+        <div className="card" style={{ padding: '1.25rem', background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', color: 'white' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <Building2 size={24} style={{ opacity: 0.9 }} />
+            <div>
+              <div style={{ fontSize: '2rem', fontWeight: 700, lineHeight: 1 }}>{colleges.length}</div>
+              <div style={{ fontSize: '0.875rem', opacity: 0.9 }}>Colleges</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="card">
         <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-          <div className="search-bar" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: '280px', padding: '0.5rem 0.75rem', border: '1px solid var(--border-color, #e2e8f0)', borderRadius: '6px' }}>
-            <Search size={18} style={{ color: 'var(--text-muted)' }} />
-            <input
-              type="text"
-              placeholder="Search departments or colleges..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              style={{ border: 'none', outline: 'none', width: '100%', background: 'transparent' }}
-            />
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <div className="search-bar" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: '280px', padding: '0.5rem 0.75rem', border: '1px solid var(--border-color, #e2e8f0)', borderRadius: '6px' }}>
+              <Search size={18} style={{ color: 'var(--text-muted)' }} />
+              <input
+                type="text"
+                placeholder="Search departments or colleges..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                style={{ border: 'none', outline: 'none', width: '100%', background: 'transparent' }}
+              />
+            </div>
+            {colleges.length > 0 && (
+              <select
+                value={selectedCollege ?? ''}
+                onChange={(e) => setSelectedCollege(e.target.value ? parseInt(e.target.value, 10) : null)}
+                style={{ padding: '0.5rem 0.75rem', border: '1px solid var(--border-color, #e2e8f0)', borderRadius: '6px', background: 'white', cursor: 'pointer' }}
+              >
+                <option value="">All Colleges</option>
+                {colleges.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            )}
           </div>
-          <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            {filteredDepartments.length} department{filteredDepartments.length === 1 ? '' : 's'}
-          </span>
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+            <button
+              type="button"
+              className="icon-button"
+              onClick={() => departmentsQuery.refetch()}
+              title="Refresh"
+              disabled={departmentsQuery.isLoading}
+            >
+              <RefreshCw size={18} className={departmentsQuery.isLoading ? 'spin' : ''} />
+            </button>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+              {filteredDepartments.length} department{filteredDepartments.length === 1 ? '' : 's'}
+            </span>
+          </div>
         </div>
 
         <div className="card-body">
           {departmentsQuery.isLoading ? (
-            <div style={{ textAlign: 'center', padding: '3rem' }}>Loading departments...</div>
+            <div style={{ textAlign: 'center', padding: '3rem' }}>
+              <RefreshCw size={32} className="spin" style={{ margin: '0 auto 1rem', color: 'var(--text-muted)' }} />
+              <p style={{ color: 'var(--text-muted)' }}>Loading departments...</p>
+            </div>
           ) : filteredDepartments.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)' }}>
-              <Building2 size={40} style={{ margin: '0 auto 0.75rem', opacity: 0.5 }} />
-              <h3>{search ? 'No matching departments' : 'No departments yet'}</h3>
-              <p style={{ maxWidth: '400px', margin: '0 auto 1.25rem' }}>
-                {search
-                  ? 'Try adjusting your search criteria.'
-                  : 'Get started by creating your first academic department.'}
+              <Building2 size={48} style={{ margin: '0 auto 1rem', opacity: 0.3 }} />
+              <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>{search || selectedCollege ? 'No matching departments' : 'No departments yet'}</h3>
+              <p style={{ maxWidth: '400px', margin: '0 auto 1.5rem', lineHeight: 1.6 }}>
+                {search || selectedCollege
+                  ? 'Try adjusting your search criteria or filters.'
+                  : 'Get started by creating your first academic department to organize your institution.'}
               </p>
-              {!search && (
-                <button type="button" className="button button-primary" onClick={openCreateModal}>
+              {!search && !selectedCollege && (
+                <button type="button" className="button button-primary" onClick={openCreateModal} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
                   <Plus size={16} /> Add Department
                 </button>
               )}
             </div>
           ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table className="table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid var(--border-color, #e2e8f0)', textAlign: 'left', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                    <th style={{ padding: '0.75rem' }}>Department Name</th>
-                    <th style={{ padding: '0.75rem' }}>College</th>
-                    <th style={{ padding: '0.75rem' }}>Exams</th>
-                    <th style={{ padding: '0.75rem' }}>Questions</th>
-                    <th style={{ padding: '0.75rem', textAlign: 'right' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredDepartments.map((dept) => (
-                    <tr key={dept.id} style={{ borderBottom: '1px solid var(--border-color, #f1f5f9)' }}>
-                      <td style={{ padding: '0.85rem 0.75rem' }}>
-                        <strong style={{ display: 'block', fontSize: '0.95rem' }}>{dept.name}</strong>
-                        {dept.description && (
-                          <small style={{ color: 'var(--text-muted)', display: 'block', maxWidth: '320px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {dept.description}
-                          </small>
-                        )}
-                      </td>
-                      <td style={{ padding: '0.85rem 0.75rem', fontSize: '0.9rem' }}>
-                        {dept.college?.name ?? `College #${dept.college_id ?? 'N/A'}`}
-                      </td>
-                      <td style={{ padding: '0.85rem 0.75rem', fontSize: '0.9rem' }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
-                          <BookOpen size={14} style={{ color: 'var(--text-muted)' }} />
-                          {dept.exams_count ?? 0}
-                        </span>
-                      </td>
-                      <td style={{ padding: '0.85rem 0.75rem', fontSize: '0.9rem' }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
-                          <HelpCircle size={14} style={{ color: 'var(--text-muted)' }} />
-                          {dept.questions_count ?? 0}
-                        </span>
-                      </td>
-                      <td style={{ padding: '0.85rem 0.75rem', textAlign: 'right' }}>
-                        <div style={{ display: 'inline-flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                          <button
-                            type="button"
-                            className="icon-button"
-                            title="Edit Department"
-                            onClick={() => openEditModal(dept)}
-                          >
-                            <Edit size={16} />
-                          </button>
-                          <button
-                            type="button"
-                            className="icon-button text-danger"
-                            title="Delete Department"
-                            onClick={() => setDeleteTarget(dept)}
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </td>
+            <>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '2px solid var(--border-color, #e2e8f0)', textAlign: 'left', fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      <th style={{ padding: '1rem 0.75rem', fontWeight: 600 }}>Department Name</th>
+                      <th style={{ padding: '1rem 0.75rem', fontWeight: 600 }}>College</th>
+                      <th style={{ padding: '1rem 0.75rem', fontWeight: 600 }}>Exams</th>
+                      <th style={{ padding: '1rem 0.75rem', fontWeight: 600 }}>Questions</th>
+                      <th style={{ padding: '1rem 0.75rem', textAlign: 'right', fontWeight: 600 }}>Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {filteredDepartments.map((dept, index) => (
+                      <tr
+                        key={dept.id}
+                        style={{
+                          borderBottom: '1px solid var(--border-color, #f1f5f9)',
+                          transition: 'background-color 0.2s',
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--hover-bg, #f8fafc)'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                      >
+                        <td style={{ padding: '1rem 0.75rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
+                            <div style={{
+                              width: '40px',
+                              height: '40px',
+                              borderRadius: '8px',
+                              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: 'white',
+                              fontWeight: 600,
+                              fontSize: '0.875rem',
+                              flexShrink: 0,
+                            }}>
+                              {dept.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <strong style={{ display: 'block', fontSize: '0.95rem', color: 'var(--text-primary)' }}>{dept.name}</strong>
+                              {dept.description && (
+                                <small style={{ color: 'var(--text-muted)', display: 'block', maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '0.25rem' }}>
+                                  {dept.description}
+                                </small>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ padding: '1rem 0.75rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            padding: '0.25rem 0.75rem',
+                            background: 'var(--badge-bg, #f1f5f9)',
+                            borderRadius: '9999px',
+                            fontSize: '0.85rem',
+                          }}>
+                            <Building2 size={14} />
+                            {dept.college?.name ?? `College #${dept.college_id ?? 'N/A'}`}
+                          </span>
+                        </td>
+                        <td style={{ padding: '1rem 0.75rem', fontSize: '0.9rem' }}>
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.35rem',
+                            padding: '0.35rem 0.75rem',
+                            background: 'rgba(79, 172, 254, 0.1)',
+                            color: '#4facfe',
+                            borderRadius: '6px',
+                            fontWeight: 500,
+                          }}>
+                            <BookOpen size={14} />
+                            {dept.exams_count ?? 0}
+                          </span>
+                        </td>
+                        <td style={{ padding: '1rem 0.75rem', fontSize: '0.9rem' }}>
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.35rem',
+                            padding: '0.35rem 0.75rem',
+                            background: 'rgba(67, 233, 123, 0.1)',
+                            color: '#43e97b',
+                            borderRadius: '6px',
+                            fontWeight: 500,
+                          }}>
+                            <HelpCircle size={14} />
+                            {dept.questions_count ?? 0}
+                          </span>
+                        </td>
+                        <td style={{ padding: '1rem 0.75rem', textAlign: 'right' }}>
+                          <div style={{ display: 'inline-flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                            <button
+                              type="button"
+                              className="icon-button"
+                              title="Edit Department"
+                              onClick={() => openEditModal(dept)}
+                              style={{
+                                padding: '0.5rem',
+                                borderRadius: '6px',
+                                border: '1px solid var(--border-color, #e2e8f0)',
+                                background: 'white',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s',
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = 'var(--hover-bg, #f8fafc)';
+                                e.currentTarget.style.borderColor = 'var(--primary-color, #667eea)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = 'white';
+                                e.currentTarget.style.borderColor = 'var(--border-color, #e2e8f0)';
+                              }}
+                            >
+                              <Edit size={16} style={{ color: 'var(--text-secondary)' }} />
+                            </button>
+                            <button
+                              type="button"
+                              className="icon-button text-danger"
+                              title="Delete Department"
+                              onClick={() => setDeleteTarget(dept)}
+                              style={{
+                                padding: '0.5rem',
+                                borderRadius: '6px',
+                                border: '1px solid var(--border-color, #e2e8f0)',
+                                background: 'white',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s',
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+                                e.currentTarget.style.borderColor = '#ef4444';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = 'white';
+                                e.currentTarget.style.borderColor = 'var(--border-color, #e2e8f0)';
+                              }}
+                            >
+                              <Trash2 size={16} style={{ color: '#ef4444' }} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination */}
+              {lastPage > 1 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color, #e2e8f0)' }}>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                    Showing {((page - 1) * 10) + 1} to {Math.min(page * 10, total)} of {total} departments
+                  </span>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      className="button button-secondary"
+                      onClick={() => handlePageChange(page - 1)}
+                      disabled={page === 1}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        padding: '0.5rem 1rem',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border-color, #e2e8f0)',
+                        background: 'white',
+                        cursor: page === 1 ? 'not-allowed' : 'pointer',
+                        opacity: page === 1 ? 0.5 : 1,
+                      }}
+                    >
+                      <ChevronLeft size={16} /> Previous
+                    </button>
+                    <div style={{ display: 'flex', gap: '0.25rem' }}>
+                      {Array.from({ length: Math.min(5, lastPage) }, (_, i) => {
+                        const pageNum = i + 1;
+                        return (
+                          <button
+                            key={pageNum}
+                            type="button"
+                            onClick={() => handlePageChange(pageNum)}
+                            style={{
+                              padding: '0.5rem 0.75rem',
+                              borderRadius: '6px',
+                              border: page === pageNum ? 'none' : '1px solid var(--border-color, #e2e8f0)',
+                              background: page === pageNum ? 'var(--primary-color, #667eea)' : 'white',
+                              color: page === pageNum ? 'white' : 'var(--text-secondary)',
+                              cursor: 'pointer',
+                              minWidth: '40px',
+                              fontWeight: page === pageNum ? 600 : 400,
+                            }}
+                          >
+                            {pageNum}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <button
+                      type="button"
+                      className="button button-secondary"
+                      onClick={() => handlePageChange(page + 1)}
+                      disabled={page === lastPage}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        padding: '0.5rem 1rem',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border-color, #e2e8f0)',
+                        background: 'white',
+                        cursor: page === lastPage ? 'not-allowed' : 'pointer',
+                        opacity: page === lastPage ? 0.5 : 1,
+                      }}
+                    >
+                      Next <ChevronRight size={16} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

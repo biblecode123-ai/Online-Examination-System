@@ -566,15 +566,69 @@ export const adminApi = {
   },
 
   /** GET /departments/list-all — list departments with stats. */
-  async listDepartments(params?: { search?: string }): Promise<AdminDepartmentRow[]> {
-    const envelope = await apiRequest<Envelope<AdminDepartmentRow[]> | AdminDepartmentRow[]>('/v1/departments/list-all', {
-      query: params,
+  async listDepartments(params?: { search?: string; page?: number; per_page?: number }): Promise<{
+    items: AdminDepartmentRow[];
+    lastPage: number;
+    total: number;
+  }> {
+    const query = { per_page: 10, ...params };
+    const response = await apiRequest<Envelope<LaravelPaginator<AdminDepartmentRow>> | AdminDepartmentRow[] | Envelope<AdminDepartmentRow[]>>('/v1/departments/list-all', {
+      query,
     });
-    if (Array.isArray(envelope)) return envelope;
-    if (Array.isArray((envelope as unknown as { data?: AdminDepartmentRow[] })?.data)) {
-      return (envelope as unknown as { data: AdminDepartmentRow[] }).data;
+
+    // Handle different response formats from the backend
+    if (Array.isArray(response)) {
+      // If it's a plain array, do client-side pagination
+      const allItems = response;
+      const page = params?.page || 1;
+      const perPage = params?.per_page || 10;
+      const start = (page - 1) * perPage;
+      const end = start + perPage;
+      const items = allItems.slice(start, end);
+      return {
+        items,
+        lastPage: Math.ceil(allItems.length / perPage),
+        total: allItems.length,
+      };
     }
-    return unwrap(envelope as Envelope<AdminDepartmentRow[]>, 'Could not load departments.');
+
+    // Check if it's an envelope with data array
+    if (response && typeof response === 'object' && 'data' in response) {
+      const envelope = response as Envelope<AdminDepartmentRow[]>;
+      if (Array.isArray(envelope.data)) {
+        const allItems = envelope.data;
+        const page = params?.page || 1;
+        const perPage = params?.per_page || 10;
+        const start = (page - 1) * perPage;
+        const end = start + perPage;
+        const items = allItems.slice(start, end);
+        return {
+          items,
+          lastPage: Math.ceil(allItems.length / perPage),
+          total: allItems.length,
+        };
+      }
+    }
+
+    // Try to unwrap as LaravelPaginator
+    try {
+      const page = unwrapPage(response as Envelope<LaravelPaginator<AdminDepartmentRow>> | null, 'Could not load departments.');
+      return { items: page.items, lastPage: page.lastPage, total: page.total };
+    } catch {
+      // Fallback: treat as envelope with array data
+      const envelope = response as Envelope<AdminDepartmentRow[]>;
+      const allItems = unwrap(envelope, 'Could not load departments.');
+      const page = params?.page || 1;
+      const perPage = params?.per_page || 10;
+      const start = (page - 1) * perPage;
+      const end = start + perPage;
+      const items = allItems.slice(start, end);
+      return {
+        items,
+        lastPage: Math.ceil(allItems.length / perPage),
+        total: allItems.length,
+      };
+    }
   },
 
   /** GET /colleges/list-all — list colleges for select inputs. */
@@ -869,6 +923,7 @@ export interface AdminExamInput {
   exam_title?: string;
   description?: string | null;
   department_id?: number;
+  department_ids?: number[];
   total_time?: number;
   passing_percentage?: number;
   exam_password?: string;

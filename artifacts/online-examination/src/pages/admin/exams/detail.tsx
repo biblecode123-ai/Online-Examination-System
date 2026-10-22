@@ -243,7 +243,7 @@ function OverviewTab({ exam }: { exam: AdminRealExam }) {
         <div className="card-header">
           <h2>Exam password</h2>
           <small className="text-muted">
-            {exam.has_password ? 'A password is set (plaintext is never shown).' : 'No password set yet.'}
+            {exam.has_password ? 'A PIN is set (plaintext is never shown).' : 'No PIN set yet.'}
           </small>
         </div>
         <div className="card-body">
@@ -251,16 +251,23 @@ function OverviewTab({ exam }: { exam: AdminRealExam }) {
           <div className="inline-form">
             <div className="form-group grow">
               <label htmlFor="edit-password">
-                {exam.has_password ? 'Replace password' : 'Set password'}
+                {exam.has_password ? 'Replace PIN' : 'Set PIN'}
               </label>
               <input
                 id="edit-password"
-                type="password"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={4}
                 autoComplete="new-password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="At least 8 characters"
+                onChange={(e) => {
+                  const value = e.target.value.replace(/\D/g, '').slice(0, 4);
+                  setPassword(value);
+                }}
+                placeholder="Enter 4-digit PIN"
                 data-testid="input-set-password"
+                style={{ letterSpacing: '0.5em', fontFamily: 'monospace', fontSize: '1.1rem' }}
               />
               {passwordMutation.error instanceof ApiError && passwordMutation.error.errors?.exam_password && (
                 <small className="field-error">
@@ -271,15 +278,15 @@ function OverviewTab({ exam }: { exam: AdminRealExam }) {
             <button
               type="button"
               className="button button-secondary"
-              disabled={password.length < 8 || passwordMutation.isPending}
+              disabled={!/^\d{4}$/.test(password) || passwordMutation.isPending}
               onClick={() => passwordMutation.mutate(password)}
               data-testid="button-set-password"
             >
-              <KeyRound size={15} /> {passwordMutation.isPending ? 'Saving…' : 'Set password'}
+              <KeyRound size={15} /> {passwordMutation.isPending ? 'Saving…' : 'Set PIN'}
             </button>
           </div>
           {passwordMutation.isSuccess && (
-            <small className="field-hint success-hint">Password updated.</small>
+            <small className="field-hint success-hint">PIN updated.</small>
           )}
         </div>
       </div>
@@ -707,7 +714,7 @@ export function AdminExamDetail({ params }: { params: { id: string } }) {
           [
             exam.category?.name,
             examPhase(exam) === 'running' ? 'Running now' : PHASE_LABEL[examPhase(exam)],
-            exam.has_password ? 'Password protected' : 'No password',
+            exam.has_password ? 'PIN protected' : 'No PIN',
           ]
             .filter(Boolean)
             .join(' · ') || undefined

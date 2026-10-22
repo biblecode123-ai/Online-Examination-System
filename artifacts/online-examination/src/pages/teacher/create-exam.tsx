@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adminExamApi } from '../../lib/endpoints';
 import { ApiError } from '../../lib/api';
-import { Save, ArrowLeft } from 'lucide-react';
+import { Save, ArrowLeft, X } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 
 export function TeacherCreateExam() {
@@ -11,7 +11,7 @@ export function TeacherCreateExam() {
 
   const [formData, setFormData] = useState({
     exam_title: '',
-    department_id: 0,
+    department_ids: [] as number[],
     total_time: 60,
     passing_percentage: 50,
     exam_password: '',
@@ -43,7 +43,8 @@ export function TeacherCreateExam() {
     mutationFn: (data: typeof formData) =>
       adminExamApi.createExam({
         exam_title: data.exam_title,
-        department_id: data.department_id,
+        department_id: data.department_ids.length > 0 ? data.department_ids[0] : undefined,
+        department_ids: data.department_ids.length > 0 ? data.department_ids : undefined,
         total_time: data.total_time,
         passing_percentage: data.passing_percentage,
         exam_password: data.exam_password,
@@ -77,16 +78,30 @@ export function TeacherCreateExam() {
       setGlobalError('Real Exam category is not configured in the backend. Please seed exam categories first.');
       return;
     }
-    if (!formData.department_id) {
-      setFieldErrors((prev) => ({ ...prev, department_id: 'Please select a department.' }));
+    if (formData.department_ids.length === 0) {
+      setFieldErrors((prev) => ({ ...prev, department_ids: 'Please select at least one department.' }));
       return;
     }
     if (!formData.exam_password) {
-      setFieldErrors((prev) => ({ ...prev, exam_password: 'An exam access password is required.' }));
+      setFieldErrors((prev) => ({ ...prev, exam_password: 'An exam access PIN is required.' }));
+      return;
+    }
+    if (!/^\d{4}$/.test(formData.exam_password)) {
+      setFieldErrors((prev) => ({ ...prev, exam_password: 'The PIN must be exactly 4 digits.' }));
       return;
     }
 
     createExamMutation.mutate(formData);
+  };
+
+  const addDepartment = (deptId: number) => {
+    if (!formData.department_ids.includes(deptId)) {
+      setFormData({ ...formData, department_ids: [...formData.department_ids, deptId] });
+    }
+  };
+
+  const removeDepartment = (deptId: number) => {
+    setFormData({ ...formData, department_ids: formData.department_ids.filter(id => id !== deptId) });
   };
 
   const isPending = createExamMutation.isPending;
@@ -139,32 +154,100 @@ export function TeacherCreateExam() {
             </div>
 
             <div className="form-group">
-              <label htmlFor="department_id">Target Department *</label>
+              <label htmlFor="department_id">Target Departments *</label>
               {deptQuery.isLoading ? (
                 <p>Loading departments…</p>
               ) : deptQuery.isError ? (
                 <p className="field-error">Could not load departments. Check your connection.</p>
               ) : (
-                <select
-                  id="department_id"
-                  value={formData.department_id || ''}
-                  onChange={(e) =>
-                    setFormData({ ...formData, department_id: parseInt(e.target.value) || 0 })
-                  }
-                  className="select"
-                  required
-                >
-                  <option value="">Select a department…</option>
-                  {depts.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name}
-                    </option>
-                  ))}
-                </select>
+                <>
+                  <select
+                    id="department_id"
+                    value=""
+                    onChange={(e) => {
+                      const deptId = parseInt(e.target.value, 10);
+                      if (deptId) addDepartment(deptId);
+                    }}
+                    className="select"
+                    style={{ marginBottom: '0.75rem' }}
+                  >
+                    <option value="">Add a department…</option>
+                    {depts
+                      .filter(dept => !formData.department_ids.includes(dept.id))
+                      .map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  {formData.department_ids.length > 0 && (
+                    <div style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: '0.5rem',
+                      padding: '0.75rem',
+                      background: '#f8fafc',
+                      borderRadius: '6px',
+                      border: '1px solid #e2e8f0',
+                    }}>
+                      {formData.department_ids.map((deptId) => {
+                        const dept = depts.find(d => d.id === deptId);
+                        if (!dept) return null;
+                        return (
+                          <div
+                            key={deptId}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.5rem',
+                              padding: '0.4rem 0.75rem',
+                              background: 'white',
+                              border: '1px solid #e2e8f0',
+                              borderRadius: '9999px',
+                              fontSize: '0.875rem',
+                              fontWeight: 500,
+                            }}
+                          >
+                            <span>{dept.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => removeDepartment(deptId)}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                cursor: 'pointer',
+                                padding: '0.25rem',
+                                borderRadius: '50%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: '#64748b',
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+                                e.currentTarget.style.color = '#ef4444';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = 'transparent';
+                                e.currentTarget.style.color = '#64748b';
+                              }}
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
               )}
-              {fieldErrors.department_id && (
-                <p className="field-error">{fieldErrors.department_id}</p>
+              {fieldErrors.department_ids && (
+                <p className="field-error">{fieldErrors.department_ids}</p>
               )}
+              <small style={{ color: '#666' }}>
+                Select one or more departments that will take this exam. Students from all selected departments will be eligible.
+              </small>
             </div>
 
             <div className="form-group">
@@ -235,17 +318,22 @@ export function TeacherCreateExam() {
               <label htmlFor="exam_password">Exam Access Password *</label>
               <input
                 id="exam_password"
-                type="password"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={4}
                 value={formData.exam_password}
-                onChange={(e) => setFormData({ ...formData, exam_password: e.target.value })}
-                minLength={4}
-                maxLength={100}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/\D/g, '').slice(0, 4);
+                  setFormData({ ...formData, exam_password: value });
+                }}
                 required
                 autoComplete="new-password"
+                placeholder="Enter 4-digit PIN"
+                style={{ letterSpacing: '0.5em', fontFamily: 'monospace', fontSize: '1.1rem' }}
               />
               <small style={{ color: '#666' }}>
-                Students must enter this password to begin the exam. Stored as a one-way hash — never
-                retrievable.
+                Students must enter this 4-digit PIN to begin the exam. Stored securely.
               </small>
               {fieldErrors.exam_password && (
                 <p className="field-error">{fieldErrors.exam_password}</p>

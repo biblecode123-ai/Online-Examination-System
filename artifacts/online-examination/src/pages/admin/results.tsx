@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'wouter';
 import {
   ArrowDown,
@@ -15,8 +16,13 @@ import {
   Search,
   Users,
   ChevronRight,
+  ChevronLeft,
+  BookOpen,
+  Clock,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
-import { adminApi } from '../../lib/endpoints';
+import { adminApi, adminExamApi } from '../../lib/endpoints';
 import { useAdminExamResults, useAdminResultOptions, useAdminResults } from '../../lib/queries';
 import { dateLabel } from '../../lib/format';
 import { Button, EmptyState, ErrorBox, LoadingBlock, PageTitle, Status } from '../../components/shell';
@@ -25,9 +31,11 @@ import type {
   AdminResultsFilters,
   AdminResultSort,
   AdminScoreBucket,
+  AdminRealExam,
 } from '../../lib/types';
 
 const PER_PAGE_OPTIONS = [25, 50, 100];
+const EXAMS_PER_PAGE = 10;
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All statuses' },
@@ -156,6 +164,8 @@ export function AdminResults() {
   const [params, setParams] = useSearchParams();
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<unknown>(null);
+  const [selectedExamId, setSelectedExamId] = useState<number | null>(null);
+  const [examPage, setExamPage] = useState(1);
 
   const urlSearch = params.get('search') ?? '';
   const [searchInput, setSearchInput] = useState(urlSearch);
@@ -207,6 +217,12 @@ export function AdminResults() {
   const resultsQuery = useAdminResults(filters);
   const optionsQuery = useAdminResultOptions();
   const examSummaryQuery = useAdminExamResults(filters.exam_id ?? null);
+
+  // Fetch exams with pagination
+  const examsQuery = useQuery({
+    queryKey: ['admin-exams-list', examPage],
+    queryFn: () => adminExamApi.listExams(),
+  });
 
   const options = optionsQuery.data;
   const page = resultsQuery.data;
@@ -284,6 +300,22 @@ export function AdminResults() {
       setExporting(false);
     }
   };
+
+  const handleExamClick = (examId: number) => {
+    setSelectedExamId(examId);
+    updateParam('exam_id', String(examId));
+  };
+
+  const handleBackToExams = () => {
+    setSelectedExamId(null);
+    updateParam('exam_id', undefined);
+  };
+
+  // Client-side pagination for exams
+  const allExams = examsQuery.data?.items ?? [];
+  const totalExams = examsQuery.data?.total ?? 0;
+  const examLastPage = examsQuery.data?.lastPage ?? 1;
+  const paginatedExams = allExams.slice((examPage - 1) * EXAMS_PER_PAGE, examPage * EXAMS_PER_PAGE);
 
   const filterSummary = useMemo(() => {
     const parts: string[] = [];
@@ -438,16 +470,18 @@ export function AdminResults() {
         </div>
       )}
 
-      <section className="admin-panel no-print" style={{ marginTop: 16 }}>
-        <div className="admin-panel-header">
-          <h2>Filters</h2>
-          {activeFilterCount > 0 && (
-            <button type="button" className="text-link" onClick={clearFilters}>
-              <RotateCcw size={13} /> Clear all ({activeFilterCount})
-            </button>
-          )}
-        </div>
-        <div className="admin-panel-body">
+      {/* Filter section - Only show when viewing results (exam selected) */}
+      {filters.exam_id !== undefined && (
+        <section className="admin-panel no-print" style={{ marginTop: 16 }}>
+          <div className="admin-panel-header">
+            <h2>Filters</h2>
+            {activeFilterCount > 0 && (
+              <button type="button" className="text-link" onClick={clearFilters}>
+                <RotateCcw size={13} /> Clear all ({activeFilterCount})
+              </button>
+            )}
+          </div>
+          <div className="admin-panel-body">
           <div className="results-filters">
             <div className="filter-field filter-field-wide">
               <label htmlFor="filter-search">Search</label>
@@ -599,14 +633,146 @@ export function AdminResults() {
           </div>
         </div>
       </section>
+      )}
 
-      {filters.exam_id !== undefined && examSummary && (
+      {/* Exam List View - Only show when no exam is selected */}
+      {!selectedExamId && !filters.exam_id && (
         <section className="admin-panel" style={{ marginTop: 16 }}>
           <div className="admin-panel-header">
-            <h2>{examSummary.exam.title ?? `Examination #${examSummary.exam.id}`}</h2>
-            <span className="admin-panel-badge">{examSummary.attempts} attempt(s)</span>
+            <h2>Examinations</h2>
+            <span className="admin-panel-badge">{totalExams} exam(s)</span>
           </div>
-          <div className="admin-panel-body exam-summary-body">
+          <div className="admin-panel-body">
+            {examsQuery.isPending ? (
+              <LoadingBlock label="Loading examinations…" />
+            ) : paginatedExams.length === 0 ? (
+              <EmptyState
+                icon={<BookOpen size={23} />}
+                title="No examinations found"
+                description="No examinations have been created yet."
+              />
+            ) : (
+              <>
+                <div className="table-wrap">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Examination</th>
+                        <th>Department</th>
+                        <th>Category</th>
+                        <th>Duration</th>
+                        <th>Status</th>
+                        <th>Attempts</th>
+                        <th />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedExams.map((exam) => (
+                        <tr
+                          key={exam.id}
+                          style={{ cursor: 'pointer' }}
+                          onClick={() => handleExamClick(exam.id)}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--hover-bg, #f8fafc)'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                        >
+                          <td>
+                            <strong>{exam.exam_title ?? `Exam #${exam.id}`}</strong>
+                            <small>{exam.description || 'No description'}</small>
+                          </td>
+                          <td>
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.5rem',
+                              padding: '0.25rem 0.75rem',
+                              background: 'var(--badge-bg, #f1f5f9)',
+                              borderRadius: '9999px',
+                              fontSize: '0.85rem',
+                            }}>
+                              {options?.departments.find((dept) => dept.id === exam.department_id)?.name || `Dept #${exam.department_id ?? '—'}`}
+                            </span>
+                          </td>
+                          <td>
+                            <small>{exam.category?.name || '—'}</small>
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                              <Clock size={14} style={{ color: 'var(--text-muted)' }} />
+                              {exam.total_time ? `${exam.total_time} min` : '—'}
+                            </div>
+                          </td>
+                          <td>
+                            <Status
+                              tone={
+                                exam.lifecycle_status === 'completed' ? 'green' :
+                                exam.lifecycle_status === 'started' || exam.lifecycle_status === 'running' ? 'amber' :
+                                exam.lifecycle_status === 'ready' || exam.lifecycle_status === 'published' ? 'blue' :
+                                'neutral'
+                              }
+                            >
+                              {exam.lifecycle_status?.toUpperCase() || 'DRAFT'}
+                            </Status>
+                          </td>
+                          <td>
+                            <strong>{exam.assigned_count ?? exam.assigned_students?.length ?? 0}</strong>
+                            <small>assigned</small>
+                          </td>
+                          <td>
+                            <ChevronRight size={16} style={{ color: 'var(--text-muted)' }} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Exam Pagination */}
+                {examLastPage > 1 && (
+                  <div className="pagination-row" style={{ marginTop: '1rem' }}>
+                    <span>
+                      Page {examPage} of {examLastPage} · {totalExams} exam(s)
+                    </span>
+                    <div className="pagination-controls">
+                      <Button
+                        variant="secondary"
+                        disabled={examPage <= 1}
+                        onClick={() => setExamPage(examPage - 1)}
+                      >
+                        <ChevronLeft size={14} /> Previous
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        disabled={examPage >= examLastPage}
+                        onClick={() => setExamPage(examPage + 1)}
+                      >
+                        Next <ChevronRight size={14} />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* Exam Summary - Show when exam is selected */}
+      {filters.exam_id !== undefined && examSummary && (
+        <>
+          <Button
+            variant="secondary"
+            onClick={handleBackToExams}
+            className="back-button"
+          >
+            <ChevronLeft size={14} /> Back to Examinations List
+          </Button>
+
+          <section className="admin-panel" style={{ marginTop: 16 }}>
+            <div className="admin-panel-header">
+              <h2>{examSummary.exam.title ?? `Examination #${examSummary.exam.id}`}</h2>
+              <span className="admin-panel-badge">{examSummary.attempts} attempt(s)</span>
+            </div>
+          <div className="admin-panel-body">
             <div className="exam-summary-metrics">
               <div>
                 <small>Assigned students</small>
@@ -643,6 +809,7 @@ export function AdminResults() {
             </div>
           </div>
         </section>
+      </>
       )}
 
       <section className="admin-panel" style={{ marginTop: 16 }}>
