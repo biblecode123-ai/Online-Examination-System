@@ -482,7 +482,7 @@ export function AdminResults() {
             )}
           </div>
           <div className="admin-panel-body">
-          <div className="results-filters">
+            <div className="results-filters">
             <div className="filter-field filter-field-wide">
               <label htmlFor="filter-search">Search</label>
               <div className="search-box">

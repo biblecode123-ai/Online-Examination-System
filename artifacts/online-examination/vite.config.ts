@@ -5,11 +5,17 @@ import { defineConfig } from 'vite';
 
 import runtimeErrorOverlay from '@replit/vite-plugin-runtime-error-modal';
 
-const rawPort = process.env.PORT || '3000';
-const port = Number(rawPort);
+// PORT and BASE_PATH are injected by the hosting platform. Fall back to
+// defaults so local builds (which never use the port) still work.
+const DEFAULT_PORT = 3000;
+const rawPort = process.env.PORT;
+const parsedPort = rawPort === undefined ? Number.NaN : Number(rawPort);
+const port = Number.isInteger(parsedPort) && parsedPort > 0 ? parsedPort : DEFAULT_PORT;
 
-if (Number.isNaN(port) || port <= 0) {
-  throw new Error(`Invalid PORT value: "${rawPort}"`);
+if (rawPort !== undefined && port !== parsedPort) {
+  console.warn(
+    `[vite.config] Ignoring invalid PORT value "${rawPort}"; using ${DEFAULT_PORT} instead.`,
+  );
 }
 
 const basePath = process.env.BASE_PATH || '/';

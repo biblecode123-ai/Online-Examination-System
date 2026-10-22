@@ -1,4 +1,4 @@
-import express, { type Express, type Request, type Response } from "express";
+import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import { createProxyMiddleware } from "http-proxy-middleware";
@@ -45,25 +45,32 @@ app.use('/api', createProxyMiddleware({
   pathRewrite: {
     '^/api': '/api',
   },
-  onProxyReq: (proxyReq: any, req: Request, res: Response) => {
-    // Forward all headers from the original request
-    if (req.headers['authorization']) {
-      proxyReq.setHeader('Authorization', req.headers['authorization']);
-    }
-  },
-  onProxyRes: (proxyRes: any, req: Request, res: Response) => {
-    // Add CORS headers to the response
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  },
-  onError: (err: any, req: Request, res: Response) => {
-    console.error('Proxy error:', err);
-    res.status(500).json({
-      success: false,
-      message: 'Proxy error',
-      error: err.message,
-    });
+  on: {
+    proxyReq: (proxyReq, req) => {
+      // Forward all headers from the original request
+      if (req.headers['authorization']) {
+        proxyReq.setHeader('Authorization', req.headers['authorization']);
+      }
+    },
+    proxyRes: (_proxyRes, _req, res) => {
+      // Add CORS headers to the response
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    },
+    error: (err, _req, res) => {
+      console.error('Proxy error:', err);
+      // `res` is a raw ServerResponse (or a socket); respond with the plain HTTP API.
+      if (!('headersSent' in res) || res.headersSent) {
+        return;
+      }
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        success: false,
+        message: 'Proxy error',
+        error: err.message,
+      }));
+    },
   },
 }));
 
