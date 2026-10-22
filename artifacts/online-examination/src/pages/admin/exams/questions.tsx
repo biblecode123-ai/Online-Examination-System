@@ -569,14 +569,24 @@ function QuestionDialog({
           </div>
 
           <div className="form-group span-2">
-            <label htmlFor="q-image">Image URL (optional)</label>
+            <label htmlFor="q-image">Question image (optional)</label>
             <input
               id="q-image"
-              type="url"
-              value={form.question_image}
-              onChange={(e) => setForm({ ...form, question_image: e.target.value })}
-              placeholder="https://…"
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  const reader = new FileReader();
+                  reader.onload = () => setForm({ ...form, question_image: String(reader.result ?? '') });
+                  reader.readAsDataURL(file);
+                }
+              }}
+              data-testid="input-question-image"
             />
+            {form.question_image && (
+              <img src={form.question_image} alt="preview" style={{ maxWidth: 240, marginTop: 8, borderRadius: 8 }} />
+            )}
           </div>
 
 
@@ -1329,6 +1339,7 @@ export function QuestionsTab({ exam }: { exam: AdminRealExam }) {
     </div>
   );
 }
+
 
 
 
