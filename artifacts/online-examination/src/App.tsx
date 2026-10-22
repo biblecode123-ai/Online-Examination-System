@@ -421,6 +421,38 @@ function RouterRoot() {
   }
 
   // Fallback for unknown roles
+  if (isAdmin) {
+    return (
+      <AdminShell>
+        <Switch>
+          <Route path="/admin" component={AdminDashboard} />
+          <Route component={NotFound} />
+        </Switch>
+      </AdminShell>
+    );
+  }
+  if (isTeacher) {
+    return (
+      <TeacherShell>
+        <Switch>
+          <Route path="/teacher" component={TeacherDashboard} />
+          <Route component={NotFound} />
+        </Switch>
+      </TeacherShell>
+    );
+  }
+  if (isStudent) {
+    return (
+      <PortalShell>
+        <Switch>
+          <Route path="/" component={Dashboard} />
+          <Route path="/dashboard" component={Dashboard} />
+          <Route component={NotFound} />
+        </Switch>
+      </PortalShell>
+    );
+  }
+
   return <NotFound />;
 }
 
