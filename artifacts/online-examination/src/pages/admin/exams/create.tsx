@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation } from 'wouter';
-import { ArrowLeft, Info, Save, Plus, X, Check } from 'lucide-react';
+import { ArrowLeft, Info, Save } from 'lucide-react';
 import { adminExamApi } from '../../../lib/endpoints';
 import { ApiError } from '../../../lib/api';
 import { ErrorBox, LoadingBlock, PageTitle } from '../../../components/shell';
@@ -12,8 +12,9 @@ import { ErrorBox, LoadingBlock, PageTitle } from '../../../components/shell';
  * Only exams of the existing `Real Exam` category may be created through this
  * workflow — the category is fetched from the backend (never hardcoded). The
  * governed store endpoint (POST /v1/teacher/real-exams) accepts title,
- * description, departments (multiple), duration, passing percentage and password; every
- * exam is born as a draft.
+ * description, ONE department, duration (1–480 min), passing percentage and a
+ * REQUIRED password; every exam is born as a draft. Cross-checked against
+ * TeacherRealExamController::store in ofijan-backend.
  */
 export function AdminExamCreate() {
   const [, setLocation] = useLocation();
@@ -21,7 +22,7 @@ export function AdminExamCreate() {
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [departmentIds, setDepartmentIds] = useState<number[]>([]);
+  const [departmentId, setDepartmentId] = useState<number | null>(null);
   const [totalTime, setTotalTime] = useState(60);
   const [passing, setPassing] = useState(50);
   const [password, setPassword] = useState('');
@@ -54,11 +55,10 @@ export function AdminExamCreate() {
       adminExamApi.createExam({
         exam_title: title.trim(),
         description: description.trim() || null,
-        department_id: departmentIds.length > 0 ? departmentIds[0] : undefined,
-        department_ids: departmentIds.length > 0 ? departmentIds : undefined,
+        department_id: departmentId ?? undefined,
         total_time: Number(totalTime),
         passing_percentage: Number(passing),
-        ...(password ? { exam_password: password } : {}),
+        exam_password: password,
       }),
     onSuccess: (exam) => {
       queryClient.invalidateQueries({ queryKey: ['admin-exams'] });
@@ -68,12 +68,13 @@ export function AdminExamCreate() {
 
   const clientErrors: Record<string, string> = {};
   if (!title.trim()) clientErrors.title = 'An exam title is required.';
-  if (departmentIds.length === 0) clientErrors.department = 'Select at least one target department.';
-  if (!Number.isFinite(Number(totalTime)) || Number(totalTime) <= 0)
-    clientErrors.total_time = 'Allocated time must be at least 1 minute.';
+  if (!departmentId) clientErrors.department = 'Select the department this exam belongs to.';
+  if (!Number.isFinite(Number(totalTime)) || Number(totalTime) < 1 || Number(totalTime) > 480)
+    clientErrors.total_time = 'Allocated time must be between 1 and 480 minutes (backend limit).';
   if (Number(passing) < 0 || Number(passing) > 100)
     clientErrors.passing = 'Passing percentage must be between 0 and 100.';
-  if (password && (!/^\d{4}$/.test(password))) clientErrors.password = 'The password must be exactly 4 digits.';
+  if (!password) clientErrors.password = 'An exam password is required by the server.';
+  else if (!/^\d{4}$/.test(password)) clientErrors.password = 'The password must be exactly 4 digits.';
   const valid = Object.keys(clientErrors).length === 0;
 
   const error = createMutation.error;
@@ -91,16 +92,6 @@ export function AdminExamCreate() {
     setTouched(true);
     if (!valid || createMutation.isPending) return;
     createMutation.mutate();
-  };
-
-  const addDepartment = (deptId: number) => {
-    if (!departmentIds.includes(deptId)) {
-      setDepartmentIds([...departmentIds, deptId]);
-    }
-  };
-
-  const removeDepartment = (deptId: number) => {
-    setDepartmentIds(departmentIds.filter(id => id !== deptId));
   };
 
   return (
@@ -187,95 +178,27 @@ export function AdminExamCreate() {
             </div>
 
             <div className="form-group span-2">
-              <label htmlFor="exam-department">Target departments *</label>
-              <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                <select
-                  id="exam-department"
-                  className="select"
-                  value=""
-                  onChange={(e) => {
-                    const deptId = parseInt(e.target.value, 10);
-                    if (deptId) addDepartment(deptId);
-                  }}
-                  data-testid="select-exam-department"
-                  style={{ flex: 1 }}
-                >
-                  <option value="">Add a department…</option>
-                  {(deptQuery.data ?? [])
-                    .filter(dept => !departmentIds.includes(dept.id))
-                    .map((dept) => (
-                    <option key={dept.id} value={dept.id}>
-                      {dept.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {departmentIds.length > 0 && (
-                <div style={{
-                  display: 'flex',
-                  flexWrap: 'wrap',
-                  gap: '0.5rem',
-                  padding: '0.75rem',
-                  background: 'var(--muted-bg, #f8fafc)',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border-color, #e2e8f0)',
-                }}>
-                  {departmentIds.map((deptId) => {
-                    const dept = (deptQuery.data ?? []).find(d => d.id === deptId);
-                    if (!dept) return null;
-                    return (
-                      <div
-                        key={deptId}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '0.5rem',
-                          padding: '0.4rem 0.75rem',
-                          background: 'white',
-                          border: '1px solid var(--border-color, #e2e8f0)',
-                          borderRadius: '9999px',
-                          fontSize: '0.875rem',
-                          fontWeight: 500,
-                        }}
-                      >
-                        <span>{dept.name}</span>
-                        <button
-                          type="button"
-                          onClick={() => removeDepartment(deptId)}
-                          style={{
-                            background: 'transparent',
-                            border: 'none',
-                            cursor: 'pointer',
-                            padding: '0.25rem',
-                            borderRadius: '50%',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: 'var(--text-muted)',
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
-                            e.currentTarget.style.color = '#ef4444';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'transparent';
-                            e.currentTarget.style.color = 'var(--text-muted)';
-                          }}
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+              <label htmlFor="exam-department">Department *</label>
+              <select
+                id="exam-department"
+                className="select"
+                value={departmentId ?? ''}
+                onChange={(e) => setDepartmentId(Number(e.target.value) || null)}
+                data-testid="select-exam-department"
+              >
+                <option value="">Select a department…</option>
+                {(deptQuery.data ?? []).map((dept) => (
+                  <option key={dept.id} value={dept.id}>
+                    {dept.name}
+                  </option>
+                ))}
+              </select>
 
               {errFor('department', 'department_id') && (
                 <small className="field-error">{errFor('department', 'department_id')}</small>
               )}
               <small className="field-hint">
-                Select one or more departments that will take this exam. Students from all selected departments will be eligible.
+                One department per exam — the governed backend workflow accepts a single department.
               </small>
             </div>
           </div>
@@ -292,7 +215,7 @@ export function AdminExamCreate() {
                 id="exam-duration"
                 type="number"
                 min={1}
-                max={600}
+                max={480}
                 value={totalTime}
                 onChange={(e) => setTotalTime(Number(e.target.value))}
                 data-testid="input-exam-duration"
@@ -322,7 +245,7 @@ export function AdminExamCreate() {
             </div>
 
             <div className="form-group span-2">
-              <label htmlFor="exam-password">Exam password</label>
+              <label htmlFor="exam-password">Exam password *</label>
               <input
                 id="exam-password"
                 type="text"
@@ -343,7 +266,7 @@ export function AdminExamCreate() {
                 <small className="field-error">{errFor('password', 'exam_password')}</small>
               )}
               <small className="field-hint">
-                Students must enter this 4-digit PIN to open the exam. Publishing is blocked until a password is set.
+                Students must enter this 4-digit PIN to open the exam. The server rejects Real Exams without a password.
               </small>
             </div>
           </div>

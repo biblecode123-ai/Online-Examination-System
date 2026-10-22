@@ -918,12 +918,16 @@ export const OPTION_QUESTION_TYPES = new Set([
 
 export type AdminExamLifecycleAction = 'ready' | 'start' | 'complete' | 'revert-to-draft';
 
-/** Input accepted by POST/PATCH /v1/teacher/real-exams (StoreExamRequest). */
+/**
+ * Input accepted by POST/PATCH /v1/teacher/real-exams (StoreExamRequest).
+ * POST requires exam_title, department_id, total_time (1–480) and
+ * exam_password (4–100 chars); PATCH accepts any subset. The backend takes a
+ * SINGLE department per exam — there is no department_ids field.
+ */
 export interface AdminExamInput {
   exam_title?: string;
   description?: string | null;
   department_id?: number;
-  department_ids?: number[];
   total_time?: number;
   passing_percentage?: number;
   exam_password?: string;

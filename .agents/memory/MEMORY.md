@@ -1,1 +1,0 @@
-- [Product scope](product-scope.md) — Keep this app student-only: frontend prototype, browser mock data/persistence; no backend or admin/teacher tools.

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adminExamApi } from '../../lib/endpoints';
 import { ApiError } from '../../lib/api';
-import { Save, ArrowLeft, X } from 'lucide-react';
+import { Save, ArrowLeft } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 
 export function TeacherCreateExam() {
@@ -11,7 +11,7 @@ export function TeacherCreateExam() {
 
   const [formData, setFormData] = useState({
     exam_title: '',
-    department_ids: [] as number[],
+    department_id: null as number | null,
     total_time: 60,
     passing_percentage: 50,
     exam_password: '',
@@ -43,8 +43,7 @@ export function TeacherCreateExam() {
     mutationFn: (data: typeof formData) =>
       adminExamApi.createExam({
         exam_title: data.exam_title,
-        department_id: data.department_ids.length > 0 ? data.department_ids[0] : undefined,
-        department_ids: data.department_ids.length > 0 ? data.department_ids : undefined,
+        department_id: data.department_id ?? undefined,
         total_time: data.total_time,
         passing_percentage: data.passing_percentage,
         exam_password: data.exam_password,
@@ -78,8 +77,8 @@ export function TeacherCreateExam() {
       setGlobalError('Real Exam category is not configured in the backend. Please seed exam categories first.');
       return;
     }
-    if (formData.department_ids.length === 0) {
-      setFieldErrors((prev) => ({ ...prev, department_ids: 'Please select at least one department.' }));
+    if (!formData.department_id) {
+      setFieldErrors((prev) => ({ ...prev, department_id: 'Please select the department this exam belongs to.' }));
       return;
     }
     if (!formData.exam_password) {
@@ -92,16 +91,6 @@ export function TeacherCreateExam() {
     }
 
     createExamMutation.mutate(formData);
-  };
-
-  const addDepartment = (deptId: number) => {
-    if (!formData.department_ids.includes(deptId)) {
-      setFormData({ ...formData, department_ids: [...formData.department_ids, deptId] });
-    }
-  };
-
-  const removeDepartment = (deptId: number) => {
-    setFormData({ ...formData, department_ids: formData.department_ids.filter(id => id !== deptId) });
   };
 
   const isPending = createExamMutation.isPending;
@@ -154,99 +143,31 @@ export function TeacherCreateExam() {
             </div>
 
             <div className="form-group">
-              <label htmlFor="department_id">Target Departments *</label>
+              <label htmlFor="department_id">Department *</label>
               {deptQuery.isLoading ? (
                 <p>Loading departments…</p>
               ) : deptQuery.isError ? (
                 <p className="field-error">Could not load departments. Check your connection.</p>
               ) : (
-                <>
-                  <select
-                    id="department_id"
-                    value=""
-                    onChange={(e) => {
-                      const deptId = parseInt(e.target.value, 10);
-                      if (deptId) addDepartment(deptId);
-                    }}
-                    className="select"
-                    style={{ marginBottom: '0.75rem' }}
-                  >
-                    <option value="">Add a department…</option>
-                    {depts
-                      .filter(dept => !formData.department_ids.includes(dept.id))
-                      .map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.name}
-                      </option>
-                    ))}
-                  </select>
-
-                  {formData.department_ids.length > 0 && (
-                    <div style={{
-                      display: 'flex',
-                      flexWrap: 'wrap',
-                      gap: '0.5rem',
-                      padding: '0.75rem',
-                      background: '#f8fafc',
-                      borderRadius: '6px',
-                      border: '1px solid #e2e8f0',
-                    }}>
-                      {formData.department_ids.map((deptId) => {
-                        const dept = depts.find(d => d.id === deptId);
-                        if (!dept) return null;
-                        return (
-                          <div
-                            key={deptId}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '0.5rem',
-                              padding: '0.4rem 0.75rem',
-                              background: 'white',
-                              border: '1px solid #e2e8f0',
-                              borderRadius: '9999px',
-                              fontSize: '0.875rem',
-                              fontWeight: 500,
-                            }}
-                          >
-                            <span>{dept.name}</span>
-                            <button
-                              type="button"
-                              onClick={() => removeDepartment(deptId)}
-                              style={{
-                                background: 'transparent',
-                                border: 'none',
-                                cursor: 'pointer',
-                                padding: '0.25rem',
-                                borderRadius: '50%',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: '#64748b',
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
-                                e.currentTarget.style.color = '#ef4444';
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.background = 'transparent';
-                                e.currentTarget.style.color = '#64748b';
-                              }}
-                            >
-                              <X size={14} />
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </>
+                <select
+                  id="department_id"
+                  value={formData.department_id ?? ''}
+                  onChange={(e) => setFormData({ ...formData, department_id: Number(e.target.value) || null })}
+                  className="select"
+                >
+                  <option value="">Select a department…</option>
+                  {depts.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
               )}
-              {fieldErrors.department_ids && (
-                <p className="field-error">{fieldErrors.department_ids}</p>
+              {fieldErrors.department_id && (
+                <p className="field-error">{fieldErrors.department_id}</p>
               )}
               <small style={{ color: '#666' }}>
-                Select one or more departments that will take this exam. Students from all selected departments will be eligible.
+                One department per exam — the governed backend workflow accepts a single department.
               </small>
             </div>
 
