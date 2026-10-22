@@ -315,12 +315,19 @@ function RouterRoot() {
 
   useEffect(() => {
     if (status === 'anonymous' && location !== '/login') setLocation('/login');
-    if (status === 'authenticated' && location === '/login') {
-      // Redirect based on role
+    if (status === 'authenticated') {
       const role = user?.role_slug;
-      if (role === 'admin') setLocation('/admin');
-      else if (role === 'teacher') setLocation('/teacher');
-      else setLocation('/dashboard');
+      if (location === '/login') {
+        // Redirect based on role
+        if (role === 'admin') setLocation('/admin');
+        else if (role === 'teacher') setLocation('/teacher');
+        else setLocation('/dashboard');
+      } else if (location === '/' || location === '') {
+        // Redirect root based on role
+        if (role === 'admin') setLocation('/admin');
+        else if (role === 'teacher') setLocation('/teacher');
+        else setLocation('/dashboard');
+      }
     }
   }, [status, location, setLocation, user]);
 
