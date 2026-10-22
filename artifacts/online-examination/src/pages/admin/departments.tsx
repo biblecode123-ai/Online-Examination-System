@@ -193,7 +193,9 @@ export function AdminDepartments() {
             <BookOpen size={24} style={{ opacity: 0.9 }} />
             <div>
               <div style={{ fontSize: '2rem', fontWeight: 700, lineHeight: 1 }}>
-                {departments.reduce((sum, d) => sum + (d.exams_count ?? 0), 0)}
+                  {!search
+                    ? departments.reduce((sum, d) => sum + (d.exams_count ?? 0), 0)
+                    : filteredDepartments.reduce((sum, d) => sum + (d.exams_count ?? 0), 0)}
               </div>
               <div style={{ fontSize: '0.875rem', opacity: 0.9 }}>Total Exams</div>
             </div>
@@ -204,7 +206,9 @@ export function AdminDepartments() {
             <HelpCircle size={24} style={{ opacity: 0.9 }} />
             <div>
               <div style={{ fontSize: '2rem', fontWeight: 700, lineHeight: 1 }}>
-                {departments.reduce((sum, d) => sum + (d.questions_count ?? 0), 0)}
+                  {!search
+                    ? departments.reduce((sum, d) => sum + (d.questions_count ?? 0), 0)
+                    : filteredDepartments.reduce((sum, d) => sum + (d.questions_count ?? 0), 0)}
               </div>
               <div style={{ fontSize: '0.875rem', opacity: 0.9 }}>Total Questions</div>
             </div>
@@ -346,7 +350,7 @@ export function AdminDepartments() {
                             fontSize: '0.85rem',
                           }}>
                             <Building2 size={14} />
-                            {dept.college?.name ?? `College #${dept.college_id ?? 'N/A'}`}
+                            {colleges.find(c => c.id === dept.college_id)?.name ?? `College #${dept.college_id ?? 'N/A'}`}
                           </span>
                         </td>
                         <td style={{ padding: '1rem 0.75rem', fontSize: '0.9rem' }}>
