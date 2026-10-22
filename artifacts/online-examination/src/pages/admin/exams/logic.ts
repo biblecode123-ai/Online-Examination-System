@@ -90,8 +90,9 @@ export function questionTotalMarks(questions: AdminQuestionRow[]): number {
 export const SUPPORTED_QUESTION_TYPES = [
   { value: 'multiple_choice', label: 'Multiple choice' },
   { value: 'true_false', label: 'True / False' },
-  { value: 'essay', label: 'Essay (written answer)' },
+  { value: 'matching', label: 'Matching' },
   { value: 'blank', label: 'Fill in the blank' },
+  { value: 'essay', label: 'Essay (written answer)' },
 ] as const;
 
 export const QUESTION_TYPE_LABEL: Record<string, string> = {

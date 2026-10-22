@@ -120,7 +120,52 @@ export function PreviewTab({ exam }: { exam: AdminRealExam }) {
                 <img src={question.question_image} alt="" className="q-image" loading="lazy" />
               )}
 
-              {(question.options ?? []).length > 0 ? (
+              {question.question_type === 'matching' ? (
+                <div
+                  className="preview-matching"
+                  style={{
+                    margin: '0.75rem 0',
+                    background: 'var(--bg-subtle, #f8fafc)',
+                    padding: '0.75rem 1rem',
+                    borderRadius: '6px',
+                  }}
+                  data-testid={`preview-matching-${question.id}`}
+                >
+                  <small
+                    style={{
+                      fontWeight: 600,
+                      color: 'var(--text-muted)',
+                      display: 'block',
+                      marginBottom: '0.5rem',
+                    }}
+                  >
+                    Matching Pairs:
+                  </small>
+                  {question.matching_pairs && question.matching_pairs.length > 0 ? (
+                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: '0.4rem' }}>
+                      {question.matching_pairs.map((mp, mpIdx) => (
+                        <li
+                          key={mp.id ?? mpIdx}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            fontSize: '0.9rem',
+                          }}
+                        >
+                          <span style={{ fontWeight: 500 }}>{mp.left_item}</span>
+                          <span style={{ color: 'var(--text-muted)' }}>↔</span>
+                          <span style={{ color: showKey ? 'var(--primary, #3b82f6)' : 'inherit', fontWeight: showKey ? 600 : 400 }}>
+                            {showKey ? mp.right_item : '_______________'}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <span className="text-muted">No matching pairs configured</span>
+                  )}
+                </div>
+              ) : (question.options ?? []).length > 0 ? (
                 <ul className="q-options">
                   {(question.options ?? []).map((option, optionIndex) => (
                     <li

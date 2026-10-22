@@ -894,6 +894,11 @@ export interface AdminQuestionInput {
     option_type: 'mc' | 'tf' | 'truefalse' | 'matching';
     is_correct: boolean;
   }[];
+  matching_pairs?: {
+    left_item: string;
+    right_item: string;
+  }[];
+  instructions?: string;
 }
 
 function unwrapPage<T>(envelope: Envelope<LaravelPaginator<T>> | null, fallback: string) {

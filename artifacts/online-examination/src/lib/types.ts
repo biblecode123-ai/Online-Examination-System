@@ -147,7 +147,13 @@ export interface QuestionPayload {
   order_number?: number;
   options: QuestionOption[];
   question_image?: string | null;
+  instructions?: string | null;
+  multiple_correct?: boolean;
   passage?: { id: number; title?: string | null; content?: string | null } | null;
+  matching_data?: {
+    left_items: { id: number; text: string }[];
+    right_options: { id: number; text: string }[];
+  } | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -659,6 +665,9 @@ export interface AdminQuestionRow {
   updated_at?: string | null;
   options?: AdminQuestionOptionFull[];
   passage?: { id: number; title?: string | null; content?: string | null } | null;
+  matching_pairs?: { id?: number; left_item: string; right_item: string }[];
+  instructions?: { id?: number; content?: string }[];
+  merged_instructions?: string | null;
 }
 
 /** Custom pagination block of the questions list (meta.pagination). */

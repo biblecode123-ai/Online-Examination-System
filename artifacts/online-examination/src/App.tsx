@@ -370,6 +370,7 @@ function RouterRoot() {
         <Switch>
           <Route path="/teacher" component={TeacherDashboard} />
           <Route path="/teacher/create" component={TeacherCreateExam} />
+          <Route path="/teacher/exams/:id" component={AdminExamDetail} />
           <Route path="/teacher/assignments" component={TeacherAssignments} />
           <Route path="/teacher/grading" component={TeacherGrading} />
           <Route path="/teacher/profile" component={Profile} />

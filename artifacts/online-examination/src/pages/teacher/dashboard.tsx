@@ -228,9 +228,9 @@ export function TeacherDashboard() {
                       <td style={{ padding: '0.85rem 0.75rem', textAlign: 'right' }}>
                         <div style={{ display: 'inline-flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
                           <Link
-                            href={`/admin/exams/${exam.id}`}
+                            href={`/teacher/exams/${exam.id}`}
                             className="button button-secondary button-sm"
-                            title="Manage exam content, sections, and lifecycle"
+                            title="Manage exam content, questions, sections, and lifecycle"
                           >
                             Manage
                           </Link>

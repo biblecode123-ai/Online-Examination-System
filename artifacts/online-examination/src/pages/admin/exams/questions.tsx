@@ -31,6 +31,11 @@ interface OptionDraft {
   correct: boolean;
 }
 
+interface MatchingPairDraft {
+  left: string;
+  right: string;
+}
+
 interface QuestionFormState {
   question_text: string;
   question_type: string;
@@ -40,8 +45,154 @@ interface QuestionFormState {
   question_image: string;
   answer: string;
   passage_id: string;
+  instructions: string;
+  multiple_correct: boolean;
   options: OptionDraft[];
+  matching_pairs: MatchingPairDraft[];
 }
+
+export const SIMULATION_EXAMPLES = [
+  {
+    code: 'A',
+    label: 'Ex A: MCQ Single Correct (ATP) — 2 pts',
+    state: {
+      question_text: 'What is the primary function of adenosine triphosphate (ATP) in cellular processes?',
+      question_type: 'multiple_choice',
+      points: 2,
+      difficulty: 'medium',
+      instructions: 'Select the single best answer.',
+      explanation: 'ATP serves as the primary and direct molecular energy currency for cellular work and biochemical reactions.',
+      question_image: '',
+      answer: '',
+      passage_id: '',
+      multiple_correct: false,
+      options: [
+        { text: 'Long-term storage of genetic information', correct: false },
+        { text: 'Direct energy currency for biochemical reactions and cellular work', correct: true },
+        { text: 'Structural component forming the lipid bilayer of cell membranes', correct: false },
+        { text: 'Enzymatic catalyst for the synthesis of complex fatty acids', correct: false },
+      ],
+      matching_pairs: [
+        { left: '', right: '' },
+        { left: '', right: '' },
+      ],
+    },
+  },
+  {
+    code: 'B',
+    label: 'Ex B: MCQ Multi-Correct (Blood) — 5 pts',
+    state: {
+      question_text: 'Which of the following are primary formed elements (cellular components) of human blood? (Select all that apply)',
+      question_type: 'multiple_choice',
+      points: 5,
+      difficulty: 'hard',
+      instructions: 'Select all correct answers.',
+      explanation: 'Erythrocytes (red blood cells), leukocytes (white blood cells), and thrombocytes (platelets) constitute the formed elements of blood. Chondrocytes are cartilage cells.',
+      question_image: '',
+      answer: '',
+      passage_id: '',
+      multiple_correct: true,
+      options: [
+        { text: 'Erythrocytes (red blood cells)', correct: true },
+        { text: 'Leukocytes (white blood cells)', correct: true },
+        { text: 'Thrombocytes (platelets)', correct: true },
+        { text: 'Chondrocytes (cartilage cells)', correct: false },
+      ],
+      matching_pairs: [
+        { left: '', right: '' },
+        { left: '', right: '' },
+      ],
+    },
+  },
+  {
+    code: 'C',
+    label: 'Ex C: True/False (Heart) — 1 pt',
+    state: {
+      question_text: 'The human heart typically consists of four distinct muscular chambers: two upper atria and two lower ventricles.',
+      question_type: 'true_false',
+      points: 1,
+      difficulty: 'easy',
+      instructions: 'Indicate whether the statement is True or False.',
+      explanation: 'The mammalian heart has four distinct chambers: right atrium, left atrium, right ventricle, and left ventricle.',
+      question_image: '',
+      answer: '',
+      passage_id: '',
+      multiple_correct: false,
+      options: [
+        { text: 'True', correct: true },
+        { text: 'False', correct: false },
+      ],
+      matching_pairs: [
+        { left: '', right: '' },
+        { left: '', right: '' },
+      ],
+    },
+  },
+  {
+    code: 'D',
+    label: 'Ex D: Matching (Organelles) — 8 pts',
+    state: {
+      question_text: 'Match each cellular organelle with its primary biological function:',
+      question_type: 'matching',
+      points: 8,
+      difficulty: 'medium',
+      instructions: 'Match each organelle on the left with its corresponding biological function on the right.',
+      explanation: 'Mitochondria generate ATP via oxidative phosphorylation, ribosomes synthesize polypeptides, and chloroplasts carry out photosynthesis in plant cells.',
+      question_image: '',
+      answer: '',
+      passage_id: '',
+      multiple_correct: false,
+      options: [],
+      matching_pairs: [
+        { left: 'Mitochondria', right: 'Energy production (ATP synthesis)' },
+        { left: 'Ribosomes', right: 'Protein synthesis (translation)' },
+        { left: 'Chloroplasts', right: 'Photosynthesis (light energy conversion)' },
+      ],
+    },
+  },
+  {
+    code: 'E',
+    label: 'Ex E: Fill-in-Blank (Cell) — 3 pts',
+    state: {
+      question_text: 'The fundamental structural and functional unit of all known living organisms is the ________.',
+      question_type: 'blank',
+      points: 3,
+      difficulty: 'easy',
+      instructions: 'Fill in the blank with the appropriate single biological term.',
+      explanation: 'According to modern cell theory, the cell is the basic structural and functional unit of all living organisms.',
+      question_image: '',
+      answer: 'cell',
+      passage_id: '',
+      multiple_correct: false,
+      options: [],
+      matching_pairs: [
+        { left: '', right: '' },
+        { left: '', right: '' },
+      ],
+    },
+  },
+  {
+    code: 'F',
+    label: 'Ex F: Essay (Cardiovascular Pathway) — 10 pts',
+    state: {
+      question_text: 'Explain the systemic pathway of blood through the human cardiovascular system, contrasting oxygenated and deoxygenated blood flow from the left ventricle through return to the right atrium.',
+      question_type: 'essay',
+      points: 10,
+      difficulty: 'hard',
+      instructions: 'Detail the major chambers, vascular circuits, systemic capillary exchange, and blood oxygenation stages.',
+      explanation: 'Scoring Rubric (10 pts total): (1) Left ventricle contraction and aortic ejection (2 pts); (2) Systemic capillary bed gas and nutrient exchange (3 pts); (3) Venous collection into superior/inferior vena cava (3 pts); (4) Deoxygenated return into right atrium (2 pts).',
+      question_image: '',
+      answer: '',
+      passage_id: '',
+      multiple_correct: false,
+      options: [],
+      matching_pairs: [
+        { left: '', right: '' },
+        { left: '', right: '' },
+      ],
+    },
+  },
+];
 
 const EMPTY_FORM: QuestionFormState = {
   question_text: '',
@@ -52,26 +203,67 @@ const EMPTY_FORM: QuestionFormState = {
   question_image: '',
   answer: '',
   passage_id: '',
+  instructions: '',
+  multiple_correct: false,
   options: [
     { text: '', correct: true },
     { text: '', correct: false },
   ],
+  matching_pairs: [
+    { left: '', right: '' },
+    { left: '', right: '' },
+  ],
 };
 
 function formFromQuestion(q: AdminQuestionRow): QuestionFormState {
+  const instructions =
+    q.merged_instructions ??
+    (q.instructions && q.instructions.length > 0 ? q.instructions[0].content : '') ??
+    '';
+
+  let matchingPairs: MatchingPairDraft[] = [];
+  if (q.matching_pairs && q.matching_pairs.length > 0) {
+    matchingPairs = q.matching_pairs.map((mp) => ({ left: mp.left_item, right: mp.right_item }));
+  } else if (q.question_type === 'matching' && q.answer) {
+    try {
+      const parsed = JSON.parse(q.answer);
+      if (parsed && typeof parsed === 'object') {
+        matchingPairs = Object.entries(parsed).map(([left, right]) => ({
+          left,
+          right: String(right),
+        }));
+      }
+    } catch {
+      // ignore
+    }
+  }
+  if (matchingPairs.length < 2) {
+    matchingPairs = [
+      { left: '', right: '' },
+      { left: '', right: '' },
+    ];
+  }
+
+  const options =
+    (q.options ?? []).length > 0
+      ? q.options!.map((o) => ({ text: o.option_text, correct: Boolean(o.is_correct) }))
+      : EMPTY_FORM.options.map((o) => ({ ...o }));
+
+  const correctCount = options.filter((o) => o.correct).length;
+
   return {
     question_text: q.question_text ?? '',
     question_type: q.question_type ?? 'multiple_choice',
-    points: Number(q.points) || 1,
+    points: Math.max(1, Math.round(Number(q.points) || 1)),
     difficulty: q.difficulty ?? 'medium',
     explanation: q.explanation ?? '',
     question_image: q.question_image ?? '',
     answer: q.answer ?? '',
     passage_id: q.passage_id ? String(q.passage_id) : '',
-    options:
-      (q.options ?? []).length > 0
-        ? q.options!.map((o) => ({ text: o.option_text, correct: Boolean(o.is_correct) }))
-        : EMPTY_FORM.options.map((o) => ({ ...o })),
+    instructions: instructions ?? '',
+    multiple_correct: correctCount > 1,
+    options,
+    matching_pairs: matchingPairs,
   };
 }
 
@@ -83,8 +275,8 @@ function toPayload(
   const text = form.question_text.trim();
   if (!text) return { payload: {} as AdminQuestionInput, error: 'Question text is required.' };
   const points = Number(form.points);
-  if (!Number.isFinite(points) || points <= 0)
-    return { payload: {} as AdminQuestionInput, error: 'Points must be greater than zero.' };
+  if (!Number.isFinite(points) || points <= 0 || !Number.isInteger(points))
+    return { payload: {} as AdminQuestionInput, error: 'Maximum points must be an integer greater than zero.' };
 
   const base: AdminQuestionInput = {
     exam_id: examId,
@@ -93,6 +285,7 @@ function toPayload(
     points,
     difficulty: form.difficulty,
   };
+  if (form.instructions.trim()) base.instructions = form.instructions.trim();
   if (form.explanation.trim()) base.explanation = form.explanation.trim();
   if (form.question_image.trim()) base.question_image = form.question_image.trim();
   if (form.passage_id) base.passage_id = Number(form.passage_id);
@@ -102,7 +295,7 @@ function toPayload(
     if (options.length < 2)
       return { payload: {} as AdminQuestionInput, error: 'Multiple-choice needs at least two options.' };
     if (!options.some((o) => o.correct))
-      return { payload: {} as AdminQuestionInput, error: 'Mark the correct answer.' };
+      return { payload: {} as AdminQuestionInput, error: 'Mark at least one correct answer option.' };
     base.options = options.map((o) => ({
       question_option: o.text.trim(),
       option_text: o.text.trim(),
@@ -118,6 +311,23 @@ function toPayload(
       option_type: 'tf' as const,
       is_correct: value === (correct.text === 'True'),
     }));
+  } else if (form.question_type === 'matching') {
+    const validPairs = form.matching_pairs.filter((p) => p.left.trim() && p.right.trim());
+    if (validPairs.length < 2) {
+      return {
+        payload: {} as AdminQuestionInput,
+        error: 'Matching questions require at least two complete pairs (Left and Right items).',
+      };
+    }
+    base.matching_pairs = validPairs.map((p) => ({
+      left_item: p.left.trim(),
+      right_item: p.right.trim(),
+    }));
+    const pairsMap: Record<string, string> = {};
+    validPairs.forEach((p) => {
+      pairsMap[p.left.trim()] = p.right.trim();
+    });
+    base.answer = JSON.stringify(pairsMap);
   } else if (form.question_type === 'blank') {
     if (!form.answer.trim())
       return { payload: {} as AdminQuestionInput, error: 'Provide the expected answer text.' };
@@ -175,20 +385,113 @@ function QuestionDialog({
     }));
   };
 
+  const handleTypeChange = (newType: string) => {
+    if (newType === form.question_type) return;
+    const hasOptions = form.options.some((o) => o.text.trim());
+    const hasPairs = form.matching_pairs.some((p) => p.left.trim() || p.right.trim());
+    const hasBlank = Boolean(form.answer.trim());
+    if ((hasOptions || hasPairs || hasBlank) && editing) {
+      if (
+        !window.confirm(
+          `Switching question type to "${QUESTION_TYPE_LABEL[newType] ?? newType}" will replace incompatible answer configuration. Proceed?`,
+        )
+      ) {
+        return;
+      }
+    }
+    setForm((prev) => ({
+      ...prev,
+      question_type: newType,
+      options:
+        newType === 'multiple_choice' && prev.options.length === 0
+          ? [
+              { text: '', correct: true },
+              { text: '', correct: false },
+            ]
+          : prev.options,
+      matching_pairs:
+        newType === 'matching' && prev.matching_pairs.length === 0
+          ? [
+              { left: '', right: '' },
+              { left: '', right: '' },
+            ]
+          : prev.matching_pairs,
+    }));
+  };
+
   const isOptionsType = form.question_type === 'multiple_choice';
   const isTF = form.question_type === 'true_false';
-  const serverErrors = saveMutation.error instanceof Error && 'errors' in saveMutation.error
-    ? (saveMutation.error as { errors?: Record<string, string[]> }).errors
-    : undefined;
+  const isMatching = form.question_type === 'matching';
+  const isBlank = form.question_type === 'blank';
+  const isEssay = form.question_type === 'essay';
+
+  const serverErrors =
+    saveMutation.error instanceof Error && 'errors' in saveMutation.error
+      ? (saveMutation.error as { errors?: Record<string, string[]> }).errors
+      : undefined;
 
   return (
     <div className="dialog-scrim" role="presentation">
-      <div className="dialog dialog-wide" role="dialog" aria-modal="true" aria-label={editing ? 'Edit question' : 'Add question'} data-testid="dialog-question-form">
+      <div
+        className="dialog dialog-wide"
+        role="dialog"
+        aria-modal="true"
+        aria-label={editing ? 'Edit question' : 'Add question'}
+        data-testid="dialog-question-form"
+      >
         <div className="dialog-head">
           <h3>{editing ? `Edit question #${editing.id}` : 'Add a question'}</h3>
-          <button type="button" className="icon-button" onClick={onClose} aria-label="Close" data-testid="button-close-question-dialog">
+          <button
+            type="button"
+            className="icon-button"
+            onClick={onClose}
+            aria-label="Close"
+            data-testid="button-close-question-dialog"
+          >
             <X size={16} />
           </button>
+        </div>
+
+        {/* ─── Simulation Examples Quick Loader ─── */}
+        <div
+          style={{
+            background: 'var(--bg-subtle, #f8fafc)',
+            border: '1px solid var(--border-color, #e2e8f0)',
+            borderRadius: '8px',
+            padding: '0.75rem 1rem',
+            marginBottom: '1rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '0.5rem',
+          }}
+          data-testid="simulation-examples-loader"
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <BookOpen size={16} style={{ color: 'var(--primary, #3b82f6)' }} />
+            <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Load Simulation Example:</span>
+          </div>
+          <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+            {SIMULATION_EXAMPLES.map((ex) => (
+              <button
+                key={ex.code}
+                type="button"
+                className="button button-secondary button-sm"
+                title={ex.label}
+                onClick={() => {
+                  setForm({
+                    ...EMPTY_FORM,
+                    ...ex.state,
+                  });
+                  setClientError(null);
+                }}
+                data-testid={`button-load-example-${ex.code.toLowerCase()}`}
+              >
+                Ex {ex.code} ({ex.state.points}pt)
+              </button>
+            ))}
+          </div>
         </div>
 
         <ErrorBox error={saveMutation.error} testId="question-save-error" />
@@ -205,7 +508,7 @@ function QuestionDialog({
               id="q-type"
               className="select"
               value={form.question_type}
-              onChange={(e) => setForm({ ...form, question_type: e.target.value })}
+              onChange={(e) => handleTypeChange(e.target.value)}
               data-testid="select-question-type"
             >
               {SUPPORTED_QUESTION_TYPES.map((type) => (
@@ -215,19 +518,37 @@ function QuestionDialog({
               ))}
             </select>
             <small className="field-hint">
-              Only types the student exam UI can render and grade are offered.
+              Supports MCQ, True/False, Matching, Blank, and Essay formats.
             </small>
           </div>
 
           <div className="form-group">
-            <label htmlFor="q-points">Points</label>
+            <label htmlFor="q-points">Maximum points</label>
             <input
               id="q-points"
               type="number"
               min={1}
+              step={1}
               value={form.points}
-              onChange={(e) => setForm({ ...form, points: Number(e.target.value) })}
+              onChange={(e) =>
+                setForm({ ...form, points: Math.max(1, parseInt(e.target.value, 10) || 1) })
+              }
               data-testid="input-question-points"
+            />
+            <small className="field-hint">
+              Independently configurable maximum points for this question.
+            </small>
+          </div>
+
+          <div className="form-group span-2">
+            <label htmlFor="q-instructions">Question instructions (optional)</label>
+            <input
+              id="q-instructions"
+              type="text"
+              value={form.instructions}
+              onChange={(e) => setForm({ ...form, instructions: e.target.value })}
+              placeholder="e.g. Select all that apply, or Answer in 200 words or less"
+              data-testid="input-question-instructions"
             />
           </div>
 
@@ -249,6 +570,7 @@ function QuestionDialog({
               className="select"
               value={form.difficulty}
               onChange={(e) => setForm({ ...form, difficulty: e.target.value })}
+              data-testid="select-question-difficulty"
             >
               {DIFFICULTY_OPTIONS.map((d) => (
                 <option key={d.value} value={d.value}>
@@ -285,35 +607,83 @@ function QuestionDialog({
               onChange={(e) => setForm({ ...form, question_image: e.target.value })}
               placeholder="https://…"
             />
-            <small className="field-hint">
-              The backend stores an image reference; upload the file through the question-images
-              tooling and paste its public URL here.
-            </small>
           </div>
 
           <div className="form-group span-2">
-            <label htmlFor="q-explanation">Explanation / solution (optional)</label>
+            <label htmlFor="q-explanation">Explanation / solution / rubric (optional)</label>
             <textarea
               id="q-explanation"
               rows={2}
               value={form.explanation}
               onChange={(e) => setForm({ ...form, explanation: e.target.value })}
+              placeholder="Detailed explanation, solution key, or scoring rubric"
+              data-testid="textarea-question-explanation"
             />
           </div>
 
+          {/* ─── Multiple Choice Options ─── */}
           {isOptionsType && (
             <div className="form-group span-2">
-              <label>Answer options — pick the correct one</label>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '0.5rem',
+                }}
+              >
+                <label style={{ margin: 0 }}>Answer options</label>
+                <label
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    fontSize: '0.85rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={form.multiple_correct}
+                    onChange={(e) => {
+                      const isMulti = e.target.checked;
+                      setForm((prev) => ({
+                        ...prev,
+                        multiple_correct: isMulti,
+                        options: isMulti
+                          ? prev.options
+                          : prev.options.map((opt, idx) => ({
+                              ...opt,
+                              correct: idx === prev.options.findIndex((o) => o.correct),
+                            })),
+                      }));
+                    }}
+                    data-testid="checkbox-multiple-correct-toggle"
+                  />
+                  Allow multiple correct answers (checkboxes)
+                </label>
+              </div>
+              <small className="field-hint" style={{ display: 'block', marginBottom: '0.5rem' }}>
+                {form.multiple_correct
+                  ? 'Check all options that are correct. Students must select all correct options.'
+                  : 'Pick the single correct answer option.'}
+              </small>
               <div className="options-editor" data-testid="options-editor">
                 {form.options.map((option, index) => (
                   <div className="option-line" key={index}>
                     <input
-                      type="radio"
+                      type={form.multiple_correct ? 'checkbox' : 'radio'}
                       name="correct-option"
                       checked={option.correct}
-                      onChange={() => setOption(index, { correct: true }, true)}
+                      onChange={() => {
+                        if (form.multiple_correct) {
+                          setOption(index, { correct: !option.correct }, false);
+                        } else {
+                          setOption(index, { correct: true }, true);
+                        }
+                      }}
                       aria-label={`Mark option ${index + 1} correct`}
-                      data-testid={`radio-correct-${index}`}
+                      data-testid={`correct-choice-${index}`}
                     />
                     <input
                       type="text"
@@ -355,6 +725,7 @@ function QuestionDialog({
             </div>
           )}
 
+          {/* ─── True / False ─── */}
           {isTF && (
             <div className="form-group span-2">
               <label>Correct answer</label>
@@ -385,7 +756,94 @@ function QuestionDialog({
             </div>
           )}
 
-          {form.question_type === 'blank' && (
+          {/* ─── Matching Pairs ─── */}
+          {isMatching && (
+            <div className="form-group span-2">
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '0.5rem',
+                }}
+              >
+                <label style={{ margin: 0 }}>Matching pairs (Left Item ↔ Right Match)</label>
+                <button
+                  type="button"
+                  className="button button-quiet button-sm"
+                  onClick={() =>
+                    setForm((prev) => ({
+                      ...prev,
+                      matching_pairs: [...prev.matching_pairs, { left: '', right: '' }],
+                    }))
+                  }
+                  data-testid="button-add-matching-pair"
+                >
+                  <Plus size={14} /> Add pair
+                </button>
+              </div>
+              <small className="field-hint" style={{ display: 'block', marginBottom: '0.75rem' }}>
+                Enter each item on the left and its matching partner on the right. Students will see the
+                right matches shuffled.
+              </small>
+              <div className="matching-pairs-editor" data-testid="matching-pairs-editor">
+                {form.matching_pairs.map((pair, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr auto 1fr auto',
+                      gap: '0.5rem',
+                      alignItems: 'center',
+                      marginBottom: '0.5rem',
+                    }}
+                  >
+                    <input
+                      type="text"
+                      placeholder={`Left Item ${index + 1} (e.g. Mitochondria)`}
+                      value={pair.left}
+                      onChange={(e) => {
+                        const next = [...form.matching_pairs];
+                        next[index] = { ...next[index], left: e.target.value };
+                        setForm({ ...form, matching_pairs: next });
+                      }}
+                      data-testid={`input-matching-left-${index}`}
+                    />
+                    <span style={{ color: 'var(--text-muted)' }}>↔</span>
+                    <input
+                      type="text"
+                      placeholder={`Right Match ${index + 1} (e.g. ATP production)`}
+                      value={pair.right}
+                      onChange={(e) => {
+                        const next = [...form.matching_pairs];
+                        next[index] = { ...next[index], right: e.target.value };
+                        setForm({ ...form, matching_pairs: next });
+                      }}
+                      data-testid={`input-matching-right-${index}`}
+                    />
+                    <button
+                      type="button"
+                      className="icon-button"
+                      aria-label={`Remove pair ${index + 1}`}
+                      disabled={form.matching_pairs.length <= 2}
+                      onClick={() =>
+                        setForm((prev) => ({
+                          ...prev,
+                          matching_pairs: prev.matching_pairs.filter((_, i) => i !== index),
+                        }))
+                      }
+                      data-testid={`button-remove-matching-pair-${index}`}
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ─── Fill in the Blank ─── */}
+          {isBlank && (
             <div className="form-group span-2">
               <label htmlFor="q-answer">Expected answer</label>
               <input
@@ -393,8 +851,30 @@ function QuestionDialog({
                 type="text"
                 value={form.answer}
                 onChange={(e) => setForm({ ...form, answer: e.target.value })}
+                placeholder="The expected correct answer word or phrase"
                 data-testid="input-question-answer"
               />
+              <small className="field-hint">
+                Evaluation is case-insensitive and trims leading/trailing spaces.
+              </small>
+            </div>
+          )}
+
+          {/* ─── Essay ─── */}
+          {isEssay && (
+            <div className="form-group span-2">
+              <div
+                style={{
+                  background: 'var(--bg-subtle, #f8fafc)',
+                  padding: '0.85rem',
+                  borderRadius: '6px',
+                  fontSize: '0.88rem',
+                  color: 'var(--text-muted)',
+                }}
+              >
+                Essay questions allow open-ended student text submissions up to 10,000 characters. They
+                are evaluated manually by the instructor using the scoring rubric provided above.
+              </div>
             </div>
           )}
         </div>
@@ -426,7 +906,12 @@ function QuestionDialog({
             }}
             data-testid="button-save-question"
           >
-            <Save size={15} /> {saveMutation.isPending ? 'Saving…' : editing ? 'Save question' : 'Add question'}
+            <Save size={15} />{' '}
+            {saveMutation.isPending
+              ? 'Saving…'
+              : editing
+                ? 'Save question'
+                : 'Add question'}
           </button>
         </div>
       </div>
@@ -502,6 +987,31 @@ function ImportDialog({
         }
         if (type === 'blank' && typeof row.answer === 'string' && row.answer.trim()) {
           payload.answer = row.answer.trim();
+        }
+        if (type === 'matching') {
+          const pairs = Array.isArray(row.matching_pairs) ? (row.matching_pairs as Record<string, unknown>[]) : [];
+          const validPairs = pairs.filter(
+            (p) =>
+              typeof p?.left_item === 'string' &&
+              p.left_item.trim() &&
+              typeof p?.right_item === 'string' &&
+              p.right_item.trim(),
+          );
+          if (validPairs.length < 2) {
+            problems.push(
+              `Question ${n}: matching requires at least two complete pairs with "left_item" and "right_item".`,
+            );
+            return;
+          }
+          payload.matching_pairs = validPairs.map((p) => ({
+            left_item: String(p.left_item).trim(),
+            right_item: String(p.right_item).trim(),
+          }));
+          const pairsMap: Record<string, string> = {};
+          validPairs.forEach((p) => {
+            pairsMap[String(p.left_item).trim()] = String(p.right_item).trim();
+          });
+          payload.answer = JSON.stringify(pairsMap);
         }
         payloads.push(payload);
       });
@@ -620,6 +1130,23 @@ export function QuestionsTab({ exam }: { exam: AdminRealExam }) {
     onSuccess: invalidate,
   });
 
+  const seedMutation = useMutation({
+    mutationFn: () => {
+      const payloads = SIMULATION_EXAMPLES.map((ex) => {
+        const { payload } = toPayload(
+          {
+            ...EMPTY_FORM,
+            ...ex.state,
+          },
+          exam.id,
+        );
+        return payload;
+      });
+      return adminExamApi.bulkCreateQuestions(payloads);
+    },
+    onSuccess: invalidate,
+  });
+
   const questions = useMemo(
     () =>
       [...(questionsQuery.data?.items ?? [])].sort(
@@ -644,7 +1171,7 @@ export function QuestionsTab({ exam }: { exam: AdminRealExam }) {
           <h2>Questions</h2>
           <small className="text-muted" data-testid="questions-summary">
             {questions.length} question{questions.length === 1 ? '' : 's'} · {totalMarks} total
-            marks
+            points
           </small>
         </div>
         <div className="button-group">
@@ -655,6 +1182,16 @@ export function QuestionsTab({ exam }: { exam: AdminRealExam }) {
             data-testid="button-toggle-passages"
           >
             <BookOpen size={14} /> Passages
+          </button>
+          <button
+            type="button"
+            className="button button-secondary"
+            disabled={locked || structureLocked || seedMutation.isPending}
+            onClick={() => seedMutation.mutate()}
+            title="Seed all 6 benchmark simulation questions (Examples A through F)"
+            data-testid="button-seed-simulation"
+          >
+            <ListPlus size={14} /> {seedMutation.isPending ? 'Seeding…' : 'Seed Examples A–F'}
           </button>
           <button
             type="button"
@@ -728,7 +1265,7 @@ export function QuestionsTab({ exam }: { exam: AdminRealExam }) {
                   <th>#</th>
                   <th>Question</th>
                   <th>Type</th>
-                  <th className="num">Marks</th>
+                  <th className="num">Max Points</th>
                   <th>Difficulty</th>
                   <th>Passage</th>
                   <th>Updated</th>
@@ -744,11 +1281,17 @@ export function QuestionsTab({ exam }: { exam: AdminRealExam }) {
                       {question.options && question.options.length > 0 && (
                         <small className="row-subtext">
                           {question.options.length} option{question.options.length === 1 ? '' : 's'}
+                          {question.options.filter((o) => o.is_correct).length > 1 && ' · Multi-select'}
+                        </small>
+                      )}
+                      {question.matching_pairs && question.matching_pairs.length > 0 && (
+                        <small className="row-subtext">
+                          {question.matching_pairs.length} matching pair{question.matching_pairs.length === 1 ? '' : 's'}
                         </small>
                       )}
                     </td>
                     <td>{QUESTION_TYPE_LABEL[question.question_type] ?? question.question_type}</td>
-                    <td className="num">{question.points ?? '—'}</td>
+                    <td className="num" data-testid={`question-points-${question.id}`}>{question.points ?? 1}</td>
                     <td>
                       <Status
                         tone={

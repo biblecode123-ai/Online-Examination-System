@@ -626,7 +626,7 @@ function LifecycleBar({ exam }: { exam: AdminRealExam }) {
 
 export function AdminExamDetail({ params }: { params: { id: string } }) {
   const examId = Number(params.id);
-  const [, setLocation] = useLocation();
+  const [currentPath, setLocation] = useLocation();
   const search = useSearch();
   const tabParam = new URLSearchParams(search).get('tab') as TabId | null;
   const [localTab, setLocalTab] = useState<TabId>('overview');
@@ -648,9 +648,12 @@ export function AdminExamDetail({ params }: { params: { id: string } }) {
     retry: false,
   });
 
+  const isTeacher = currentPath.startsWith('/teacher');
+  const basePath = isTeacher ? '/teacher/exams' : '/admin/exams';
+
   const setTab = (next: TabId) => {
     setLocalTab(next);
-    setLocation(next === 'overview' ? `/admin/exams/${examId}` : `/admin/exams/${examId}?tab=${next}`);
+    setLocation(next === 'overview' ? `${basePath}/${examId}` : `${basePath}/${examId}?tab=${next}`);
   };
 
   const exam = examQuery.data;
@@ -683,12 +686,12 @@ export function AdminExamDetail({ params }: { params: { id: string } }) {
   if (examQuery.isError || !exam) {
     return (
       <div className="page">
-        <PageTitle eyebrow="ADMIN PORTAL / EXAMS" title="Examination not found" />
+        <PageTitle eyebrow={`${isTeacher ? 'TEACHER' : 'ADMIN'} PORTAL / EXAMS`} title="Examination not found" />
         <ErrorBox
           error={examQuery.error ?? new Error('This examination does not exist.')}
           onRetry={() => void examQuery.refetch()}
         />
-        <Link href="/admin/exams" className="button button-secondary">
+        <Link href={isTeacher ? '/teacher' : '/admin/exams'} className="button button-secondary">
           <ArrowLeft size={15} /> Back to exams
         </Link>
       </div>
@@ -698,7 +701,7 @@ export function AdminExamDetail({ params }: { params: { id: string } }) {
   return (
     <div className="page">
       <PageTitle
-        eyebrow={`ADMIN PORTAL / EXAM #${exam.id}`}
+        eyebrow={`${isTeacher ? 'TEACHER' : 'ADMIN'} PORTAL / EXAM #${exam.id}`}
         title={exam.exam_title}
         detail={
           [
@@ -710,8 +713,8 @@ export function AdminExamDetail({ params }: { params: { id: string } }) {
             .join(' · ') || undefined
         }
         action={
-          <Link href="/admin/exams" className="button button-secondary">
-            <ArrowLeft size={15} /> All exams
+          <Link href={isTeacher ? '/teacher' : '/admin/exams'} className="button button-secondary">
+            <ArrowLeft size={15} /> {isTeacher ? 'Teacher dashboard' : 'All exams'}
           </Link>
         }
       />

@@ -60,7 +60,17 @@ function writeTextDraft(attemptId: string, draft: Record<number, string>): void 
 function hasValue(answer: SavedAnswer | undefined): boolean {
   if (!answer) return false;
   if (answer.option_id !== null && answer.option_id !== undefined) return true;
-  return Boolean(answer.text && answer.text.trim());
+  if (answer.text && answer.text.trim()) {
+    try {
+      const parsed = JSON.parse(answer.text);
+      if (Array.isArray(parsed)) return parsed.length > 0;
+      if (typeof parsed === 'object' && parsed !== null) return Object.keys(parsed).length > 0;
+    } catch {
+      // plain text string
+    }
+    return true;
+  }
+  return false;
 }
 
 export function ExamAttempt() {
@@ -928,12 +938,58 @@ export function ExamAttempt() {
             <div className="question-type">
               {question.question_type === 'essay' || question.question_type === 'blank'
                 ? 'WRITE YOUR ANSWER'
-                : question.question_type === 'true_false'
-                  ? 'TRUE OR FALSE'
-                  : question.options.length > 4
-                    ? 'SELECT ALL THAT APPLY'
-                    : 'SELECT ONE'}
+                : question.question_type === 'matching'
+                  ? 'MATCH THE ITEMS'
+                  : question.question_type === 'true_false'
+                    ? 'TRUE OR FALSE'
+                    : question.multiple_correct ||
+                      question.options.length > 4 ||
+                      Boolean(question.instructions?.toLowerCase().includes('all that apply'))
+                      ? 'SELECT ALL THAT APPLY'
+                      : 'SELECT ONE'}
             </div>
+            {question.passage && (
+              <div
+                className="question-passage"
+                style={{
+                  background: 'var(--bg-subtle, #f8fafc)',
+                  padding: '1rem',
+                  borderRadius: '8px',
+                  marginBottom: '1.25rem',
+                  borderLeft: '4px solid var(--primary, #3b82f6)',
+                }}
+                data-testid={`question-passage-${question.passage.id}`}
+              >
+                {question.passage.title && (
+                  <h4 style={{ margin: '0 0 0.5rem 0', fontWeight: 600 }}>{question.passage.title}</h4>
+                )}
+                <div style={{ fontSize: '0.95rem', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>
+                  {question.passage.content}
+                </div>
+              </div>
+            )}
+            {question.question_image && (
+              <div className="question-image" style={{ marginBottom: '1rem' }}>
+                <img
+                  src={question.question_image}
+                  alt="Question visual"
+                  style={{ maxWidth: '100%', maxHeight: '350px', borderRadius: '6px' }}
+                />
+              </div>
+            )}
+            {question.instructions && (
+              <div
+                className="question-instructions-banner"
+                style={{
+                  fontSize: '0.88rem',
+                  fontStyle: 'italic',
+                  color: 'var(--text-muted)',
+                  marginBottom: '0.75rem',
+                }}
+              >
+                {question.instructions}
+              </div>
+            )}
             <h1>{question.question_text}</h1>
 
             <AnswerField
@@ -1141,29 +1197,186 @@ function AnswerField({
   disabled?: boolean;
   onChange: (answer: SavedAnswer) => void;
 }) {
-  const textTypes = ['essay', 'blank', 'short_answer', 'short', 'written'];
+  // Matching question rendering
+  if (question.question_type === 'matching') {
+    const leftItems = question.matching_data?.left_items ?? [];
+    const rightOptions = question.matching_data?.right_options ?? [];
 
+    let currentMatches: Record<string, string> = {};
+    if (value?.text) {
+      try {
+        const parsed = JSON.parse(value.text);
+        if (parsed && typeof parsed === 'object') {
+          currentMatches = parsed as Record<string, string>;
+        }
+      } catch {
+        // fallback
+      }
+    }
+
+    if (leftItems.length > 0 && rightOptions.length > 0) {
+      return (
+        <div
+          className="matching-student-board"
+          style={{ margin: '1.25rem 0' }}
+          data-testid={`matching-board-${question.id}`}
+        >
+          <div style={{ marginBottom: '0.75rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+            Select the matching item on the right for each prompt on the left:
+          </div>
+          <div style={{ display: 'grid', gap: '0.75rem' }}>
+            {leftItems.map((left, idx) => {
+              const selectedValue = currentMatches[left.text] ?? '';
+              return (
+                <div
+                  key={left.id ?? idx}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(140px, 1fr) auto minmax(180px, 1.5fr)',
+                    gap: '0.75rem',
+                    alignItems: 'center',
+                    background: 'var(--bg-subtle, #f8fafc)',
+                    padding: '0.75rem 1rem',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-color, #e2e8f0)',
+                  }}
+                  data-testid={`matching-row-${question.id}-${idx}`}
+                >
+                  <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>{left.text}</span>
+                  <span style={{ color: 'var(--text-muted)', fontWeight: 'bold' }}>➔</span>
+                  <select
+                    className="select"
+                    value={selectedValue}
+                    disabled={disabled}
+                    onChange={(e) => {
+                      const next = { ...currentMatches, [left.text]: e.target.value };
+                      onChange({ option_id: null, text: JSON.stringify(next) });
+                    }}
+                    data-testid={`matching-select-${question.id}-${idx}`}
+                    aria-label={`Match for ${left.text}`}
+                  >
+                    <option value="">-- Choose match --</option>
+                    {rightOptions.map((right) => (
+                      <option key={right.id} value={right.text}>
+                        {right.text}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+  }
+
+  // Multiple-choice with multiple correct answers
+  const isMultiCorrect =
+    question.question_type === 'multiple_choice' &&
+    (Boolean(question.multiple_correct) ||
+      (question.options.length > 0 &&
+        Boolean(question.instructions?.toLowerCase().includes('all that apply'))));
+
+  if (isMultiCorrect) {
+    let selectedIds: number[] = [];
+    if (value?.text) {
+      try {
+        const parsed = JSON.parse(value.text);
+        if (Array.isArray(parsed)) selectedIds = parsed.map(Number);
+      } catch {
+        selectedIds = value.text
+          .split(',')
+          .map((s) => Number(s.trim()))
+          .filter(Boolean);
+      }
+    } else if (value?.option_id) {
+      selectedIds = [value.option_id];
+    }
+
+    const toggleOption = (optId: number) => {
+      const next = selectedIds.includes(optId)
+        ? selectedIds.filter((id) => id !== optId)
+        : [...selectedIds, optId];
+      onChange({
+        option_id: next.length === 1 ? next[0] : null,
+        text: JSON.stringify(next),
+      });
+    };
+
+    return (
+      <div className="answer-options" role="group" aria-label="Multiple choice options">
+        {question.options.map((option, index) => {
+          const selected = selectedIds.includes(option.id);
+          return (
+            <button
+              type="button"
+              key={option.id}
+              role="checkbox"
+              aria-checked={selected}
+              disabled={disabled}
+              className={`answer-option${selected ? ' answer-selected' : ''}`}
+              data-testid={`option-${question.id}-${index}`}
+              onClick={() => toggleOption(option.id)}
+            >
+              <span className="option-mark">{selected && <Check size={15} />}</span>
+              <span>{option.option_text}</span>
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
+  const textTypes = ['essay', 'blank', 'short_answer', 'short', 'written'];
   if (textTypes.includes(question.question_type) || question.options.length === 0) {
+    const isBlank = question.question_type === 'blank';
     return (
       <div className="short-answer">
         <label className="sr-only" htmlFor={`answer-${question.id}`}>
           Your answer
         </label>
-        <textarea
-          id={`answer-${question.id}`}
-          aria-label="Your answer"
-          data-testid={`input-answer-${question.id}`}
-          value={value?.text ?? ''}
-          disabled={disabled}
-          maxLength={10000}
-          placeholder="Write your answer here…"
-          onChange={(event) => onChange({ option_id: null, text: event.target.value })}
-        />
-        <div>{(value?.text ?? '').length} / 10000 characters · saved to the server as you type</div>
+        {isBlank ? (
+          <input
+            id={`answer-${question.id}`}
+            type="text"
+            className="input"
+            aria-label="Your answer"
+            data-testid={`input-answer-${question.id}`}
+            value={value?.text ?? ''}
+            disabled={disabled}
+            maxLength={255}
+            placeholder="Type your answer here…"
+            onChange={(event) => onChange({ option_id: null, text: event.target.value })}
+            style={{
+              padding: '0.75rem 1rem',
+              fontSize: '1rem',
+              width: '100%',
+              maxWidth: '400px',
+              borderRadius: '6px',
+              border: '1px solid var(--border-color, #cbd5e1)',
+            }}
+          />
+        ) : (
+          <textarea
+            id={`answer-${question.id}`}
+            aria-label="Your answer"
+            data-testid={`input-answer-${question.id}`}
+            value={value?.text ?? ''}
+            disabled={disabled}
+            maxLength={10000}
+            placeholder="Write your answer here…"
+            onChange={(event) => onChange({ option_id: null, text: event.target.value })}
+          />
+        )}
+        <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+          {(value?.text ?? '').length} / {isBlank ? 255 : 10000} characters · saved to the server as you type
+        </div>
       </div>
     );
   }
 
+  // Single-choice (MCQ or True/False)
   return (
     <div className="answer-options" role="radiogroup" aria-label="Answer options">
       {question.options.map((option, index) => {
