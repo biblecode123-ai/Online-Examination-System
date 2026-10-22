@@ -40,13 +40,10 @@ interface QuestionFormState {
   question_text: string;
   question_type: string;
   points: number;
-  difficulty: string;
-  explanation: string;
   question_image: string;
   answer: string;
   passage_id: string;
   instructions: string;
-  multiple_correct: boolean;
   options: OptionDraft[];
   matching_pairs: MatchingPairDraft[];
 }
@@ -65,8 +62,7 @@ export const SIMULATION_EXAMPLES = [
       question_image: '',
       answer: '',
       passage_id: '',
-      multiple_correct: false,
-      options: [
+          options: [
         { text: 'Long-term storage of genetic information', correct: false },
         { text: 'Direct energy currency for biochemical reactions and cellular work', correct: true },
         { text: 'Structural component forming the lipid bilayer of cell membranes', correct: false },
@@ -117,8 +113,7 @@ export const SIMULATION_EXAMPLES = [
       question_image: '',
       answer: '',
       passage_id: '',
-      multiple_correct: false,
-      options: [
+          options: [
         { text: 'True', correct: true },
         { text: 'False', correct: false },
       ],
@@ -141,8 +136,7 @@ export const SIMULATION_EXAMPLES = [
       question_image: '',
       answer: '',
       passage_id: '',
-      multiple_correct: false,
-      options: [],
+          options: [],
       matching_pairs: [
         { left: 'Mitochondria', right: 'Energy production (ATP synthesis)' },
         { left: 'Ribosomes', right: 'Protein synthesis (translation)' },
@@ -163,8 +157,7 @@ export const SIMULATION_EXAMPLES = [
       question_image: '',
       answer: 'cell',
       passage_id: '',
-      multiple_correct: false,
-      options: [],
+          options: [],
       matching_pairs: [
         { left: '', right: '' },
         { left: '', right: '' },
@@ -184,8 +177,7 @@ export const SIMULATION_EXAMPLES = [
       question_image: '',
       answer: '',
       passage_id: '',
-      multiple_correct: false,
-      options: [],
+          options: [],
       matching_pairs: [
         { left: '', right: '' },
         { left: '', right: '' },
@@ -198,13 +190,10 @@ const EMPTY_FORM: QuestionFormState = {
   question_text: '',
   question_type: 'multiple_choice',
   points: 1,
-  difficulty: 'medium',
-  explanation: '',
   question_image: '',
   answer: '',
   passage_id: '',
   instructions: '',
-  multiple_correct: false,
   options: [
     { text: '', correct: true },
     { text: '', correct: false },
@@ -255,13 +244,10 @@ function formFromQuestion(q: AdminQuestionRow): QuestionFormState {
     question_text: q.question_text ?? '',
     question_type: q.question_type ?? 'multiple_choice',
     points: Math.max(1, Math.round(Number(q.points) || 1)),
-    difficulty: q.difficulty ?? 'medium',
-    explanation: q.explanation ?? '',
     question_image: q.question_image ?? '',
     answer: q.answer ?? '',
     passage_id: q.passage_id ? String(q.passage_id) : '',
     instructions: instructions ?? '',
-    multiple_correct: correctCount > 1,
     options,
     matching_pairs: matchingPairs,
   };
@@ -283,10 +269,8 @@ function toPayload(
     question_type: form.question_type,
     question_text: text,
     points,
-    difficulty: form.difficulty,
   };
   if (form.instructions.trim()) base.instructions = form.instructions.trim();
-  if (form.explanation.trim()) base.explanation = form.explanation.trim();
   if (form.question_image.trim()) base.question_image = form.question_image.trim();
   if (form.passage_id) base.passage_id = Number(form.passage_id);
 
@@ -294,8 +278,9 @@ function toPayload(
     const options = form.options.filter((o) => o.text.trim());
     if (options.length < 2)
       return { payload: {} as AdminQuestionInput, error: 'Multiple-choice needs at least two options.' };
-    if (!options.some((o) => o.correct))
-      return { payload: {} as AdminQuestionInput, error: 'Mark at least one correct answer option.' };
+    const correctCount = options.filter((o) => o.correct).length;
+    if (correctCount !== 1)
+      return { payload: {} as AdminQuestionInput, error: 'Mark exactly one correct answer option.' };
     base.options = options.map((o) => ({
       question_option: o.text.trim(),
       option_text: o.text.trim(),
@@ -563,22 +548,7 @@ function QuestionDialog({
             />
           </div>
 
-          <div className="form-group">
-            <label htmlFor="q-difficulty">Difficulty</label>
-            <select
-              id="q-difficulty"
-              className="select"
-              value={form.difficulty}
-              onChange={(e) => setForm({ ...form, difficulty: e.target.value })}
-              data-testid="select-question-difficulty"
-            >
-              {DIFFICULTY_OPTIONS.map((d) => (
-                <option key={d.value} value={d.value}>
-                  {d.label}
-                </option>
-              ))}
-            </select>
-          </div>
+
 
           <div className="form-group">
             <label htmlFor="q-passage">Reading passage (optional)</label>
@@ -609,17 +579,7 @@ function QuestionDialog({
             />
           </div>
 
-          <div className="form-group span-2">
-            <label htmlFor="q-explanation">Explanation / solution / rubric (optional)</label>
-            <textarea
-              id="q-explanation"
-              rows={2}
-              value={form.explanation}
-              onChange={(e) => setForm({ ...form, explanation: e.target.value })}
-              placeholder="Detailed explanation, solution key, or scoring rubric"
-              data-testid="textarea-question-explanation"
-            />
-          </div>
+
 
           {/* ─── Multiple Choice Options ─── */}
           {isOptionsType && (
@@ -633,35 +593,7 @@ function QuestionDialog({
                 }}
               >
                 <label style={{ margin: 0 }}>Answer options</label>
-                <label
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.4rem',
-                    fontSize: '0.85rem',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={form.multiple_correct}
-                    onChange={(e) => {
-                      const isMulti = e.target.checked;
-                      setForm((prev) => ({
-                        ...prev,
-                        multiple_correct: isMulti,
-                        options: isMulti
-                          ? prev.options
-                          : prev.options.map((opt, idx) => ({
-                              ...opt,
-                              correct: idx === prev.options.findIndex((o) => o.correct),
-                            })),
-                      }));
-                    }}
-                    data-testid="checkbox-multiple-correct-toggle"
-                  />
-                  Allow multiple correct answers (checkboxes)
-                </label>
+
               </div>
               <small className="field-hint" style={{ display: 'block', marginBottom: '0.5rem' }}>
                 {form.multiple_correct
@@ -672,7 +604,7 @@ function QuestionDialog({
                 {form.options.map((option, index) => (
                   <div className="option-line" key={index}>
                     <input
-                      type={form.multiple_correct ? 'checkbox' : 'radio'}
+                      type='radio'
                       name="correct-option"
                       checked={option.correct}
                       onChange={() => {
@@ -1397,3 +1329,8 @@ export function QuestionsTab({ exam }: { exam: AdminRealExam }) {
     </div>
   );
 }
+
+
+
+
+
