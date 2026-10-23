@@ -1329,110 +1329,159 @@ select:focus-visible {
 
 /* ===========================================================================
    Login & Authentication (Section E)
+
+   The page is built from the subject it serves: the left half is the cover
+   of an official exam booklet — deep ink violet, faint ruled paper lines,
+   and an answer-sheet fragment with OMR bubbles as the one decorative
+   moment. The right half is the paper itself: a quiet, card-free form.
    =========================================================================== */
 .login-page {
   min-height: 100dvh;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1.1fr 1fr;
   background: var(--background);
 }
 
 .login-side {
+  position: relative;
+  overflow: hidden;
   min-height: 100dvh;
-  padding: 36px clamp(32px, 7vw, 96px);
-  background: var(--surface-muted);
-  border-right: 1px solid var(--border);
+  padding: 40px clamp(32px, 6vw, 80px) 48px;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0 43px,
+      rgba(255, 255, 255, 0.045) 43px 44px
+    ),
+    linear-gradient(165deg, #2E2770 0%, #262059 55%, #211B4E 100%);
   display: flex;
   flex-direction: column;
+}
+
+.login-side .login-brand strong {
+  color: var(--text-inverse);
+}
+
+.login-side .login-brand small {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.login-side .brand-mark {
+  background: var(--text-inverse);
+  color: var(--brand-primary-active);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
 }
 
 .login-copy {
   margin: auto 0;
   max-width: 440px;
+  position: relative;
+  z-index: 1;
 }
 
 .login-copy h1 {
-  font: 800 clamp(42px, 6vw, 64px)/1.05 var(--app-font-serif);
-  letter-spacing: -2px;
-  margin: 18px 0;
-  color: var(--text-primary);
-}
-
-.login-copy h1 em {
-  color: var(--brand-primary);
-  font-style: normal;
+  font: 800 clamp(40px, 5vw, 58px)/1.04 var(--app-font-serif);
+  letter-spacing: -1.8px;
+  margin: 0 0 20px;
+  color: var(--text-inverse);
 }
 
 .login-copy p {
-  max-width: 360px;
-  color: var(--text-secondary);
+  max-width: 380px;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.68);
   font-size: 15px;
-  line-height: 1.6;
+  line-height: 1.65;
 }
 
 .login-assurance {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   align-items: flex-start;
-  margin-top: 40px;
-  color: var(--brand-primary);
+  margin-top: 36px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.85);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
+  line-height: 1.5;
+  max-width: 380px;
 }
 
-.login-assurance small {
-  display: block;
-  margin-top: 4px;
-  color: var(--text-secondary);
-  font-weight: 400;
-  font-size: 12px;
+.login-assurance svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: #B7B0F5;
 }
 
-.login-footer {
-  color: var(--text-secondary);
-  font-size: 11px;
-  letter-spacing: 0.8px;
-  font-weight: 600;
+/* Answer-sheet fragment: ruled lines, a question number, OMR bubbles. */
+.exam-sheet-motif {
+  position: absolute;
+  right: clamp(-40px, -2vw, 0px);
+  bottom: clamp(24px, 7vh, 72px);
+  width: min(340px, 42%);
+  opacity: 0.5;
+  pointer-events: none;
 }
 
-.login-footer span {
-  padding: 0 8px;
+.motif-num {
+  fill: rgba(255, 255, 255, 0.5);
+  font: 700 15px var(--app-font-serif);
+}
+
+.motif-rule {
+  stroke: rgba(255, 255, 255, 0.16);
+  stroke-width: 1.5;
+}
+
+.motif-bubbles circle {
+  stroke: rgba(255, 255, 255, 0.35);
+  stroke-width: 1.5;
+}
+
+.motif-bubbles .motif-bubble-filled {
+  fill: #8B82E8;
+  stroke: #B7B0F5;
 }
 
 .login-form-area {
   display: grid;
   place-items: center;
-  padding: 36px;
+  padding: 40px clamp(24px, 5vw, 64px);
 }
 
 .login-form {
-  width: min(380px, 100%);
-  background: var(--surface);
-  padding: 36px;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-dropdown);
+  width: min(400px, 100%);
 }
 
 .login-form h2 {
-  font: 700 24px var(--app-font-serif);
-  letter-spacing: -0.5px;
-  margin: 6px 0;
+  font: 700 26px var(--app-font-serif);
+  letter-spacing: -0.6px;
+  margin: 0 0 8px;
   color: var(--text-primary);
 }
 
 .login-form > p {
   color: var(--text-secondary);
-  font-size: 14px;
-  margin: 0 0 24px;
+  font-size: 14.5px;
+  margin: 0 0 28px;
+  line-height: 1.55;
 }
 
 .login-form label {
   display: block;
   color: var(--text-primary);
-  font-size: 14px;
-  font-weight: 500;
-  margin: 16px 0 6px;
+  font-size: 13.5px;
+  font-weight: 600;
+  margin: 18px 0 7px;
+}
+
+.login-form input {
+  display: block;
+  width: 100%;
+  min-height: 46px;
+  font-size: 15px; /* ≥16px would zoom iOS on focus; 15 avoids it */
+  border-radius: var(--radius-md);
 }
 
 .password-field {
@@ -1440,20 +1489,32 @@ select:focus-visible {
 }
 
 .password-field input {
-  padding-right: 60px;
+  padding-right: 52px;
 }
 
 .password-toggle {
   position: absolute;
-  top: 0;
+  inset-block: 0;
   right: 0;
-  height: 42px;
-  padding: 0 14px;
+  width: 46px;
+  display: grid;
+  place-items: center;
   border: 0;
   background: transparent;
-  color: var(--brand-primary);
+  color: var(--text-secondary);
   cursor: pointer;
-  font-size: 12px;
+  border-radius: var(--radius-md);
+}
+
+.password-toggle:hover {
+  color: var(--brand-primary);
+  background: var(--surface-muted);
+}
+
+.capslock-hint {
+  margin-top: 8px;
+  color: var(--warning);
+  font-size: 12.5px;
   font-weight: 600;
 }
 
@@ -1496,14 +1557,16 @@ select:focus-visible {
 
 .login-form > .button {
   width: 100%;
-  margin-top: 12px;
+  margin-top: 26px;
+  min-height: 48px;
+  font-size: 15px;
 }
 
 .login-legal {
   text-align: center;
   color: var(--text-secondary);
   font-size: 12px;
-  margin-top: 20px;
+  margin-top: 18px;
   line-height: 1.5;
 }
 
@@ -2973,14 +3036,30 @@ td small {
     grid-template-columns: 1fr;
   }
   .login-side {
-    min-height: 220px;
-    padding: 24px;
+    min-height: auto;
+    padding: 28px 24px 32px;
+  }
+  .login-copy {
+    margin: 26px 0 0;
   }
   .login-copy h1 {
-    font-size: 36px;
+    font-size: 34px;
+    letter-spacing: -1px;
+    margin-bottom: 12px;
+  }
+  .login-copy p {
+    font-size: 14px;
+  }
+  .login-assurance {
+    margin-top: 20px;
+    padding-top: 16px;
+  }
+  .exam-sheet-motif {
+    display: none; /* pure decoration — first thing to go on small screens */
   }
   .login-form-area {
-    padding: 24px 16px 40px;
+    padding: 30px 20px 48px;
+    place-items: start stretch;
   }
   .attempt-page {
     padding: 12px 14px 28px;

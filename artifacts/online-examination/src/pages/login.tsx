@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { ChevronRight, CircleAlert, GraduationCap, Loader2, ShieldCheck } from 'lucide-react';
+import { CircleAlert, Eye, EyeOff, GraduationCap, Loader2, ShieldCheck } from 'lucide-react';
 import { ApiError, apiRequest } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { authApi } from '../lib/endpoints';
@@ -9,6 +9,7 @@ export function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [capsLockOn, setCapsLockOn] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [forgotState, setForgotState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
@@ -107,34 +108,43 @@ export function Login() {
           </span>
           <span>
             <strong>OFIJANA</strong>
-            <small>ONLINE EXAMINATION SYSTEM</small>
+            <small>Online examination system</small>
           </span>
         </div>
         <div className="login-copy">
-          <div className="eyebrow">EXAMINATION PORTAL</div>
           <h1>
-            Exams, with
+            Your exam
             <br />
-            <em>clarity.</em>
+            starts here.
           </h1>
-          <p>Your schedule, assessments and outcomes in one secure space.</p>
+          <p>
+            Sign in to open your assigned exams, work under the official timer, and view results
+            when they are released.
+          </p>
           <div className="login-assurance">
             <ShieldCheck size={18} />
-            <span>
-              Secure access
-              <br />
-              <small>Sign-in is verified by the OFIJANA examination server.</small>
-            </span>
+            <span>Every sign-in is verified by the OFIJANA examination server.</span>
           </div>
         </div>
-        <div className="login-footer">
-          OFIJANA <span>·</span> ONLINE EXAMINATION SYSTEM
-        </div>
+        {/* An exam booklet's answer sheet — the one decorative moment. */}
+        <svg className="exam-sheet-motif" viewBox="0 0 340 170" fill="none" aria-hidden="true">
+          <text x="0" y="24" className="motif-num">
+            01
+          </text>
+          <line x1="42" y1="18" x2="340" y2="18" className="motif-rule" />
+          <line x1="0" y1="56" x2="340" y2="56" className="motif-rule" />
+          <line x1="0" y1="94" x2="292" y2="94" className="motif-rule" />
+          <g className="motif-bubbles">
+            <circle cx="9" cy="140" r="8" />
+            <circle cx="41" cy="140" r="8" className="motif-bubble-filled" />
+            <circle cx="73" cy="140" r="8" />
+            <circle cx="105" cy="140" r="8" />
+          </g>
+        </svg>
       </div>
 
       <div className="login-form-area">
         <form className="login-form" onSubmit={onSubmit}>
-          <div className="eyebrow">WELCOME BACK</div>
           <h2>Sign in to continue</h2>
           <p>Use the email address registered with your institution.</p>
 
@@ -157,6 +167,9 @@ export function Login() {
               type={showPassword ? 'text' : 'password'}
               value={password}
               onChange={(event) => setPassword(event.target.value)}
+              onKeyUp={(event) => setCapsLockOn(event.getModifierState('CapsLock'))}
+              onKeyDown={(event) => setCapsLockOn(event.getModifierState('CapsLock'))}
+              onBlur={() => setCapsLockOn(false)}
               autoComplete="current-password"
               required
             />
@@ -167,9 +180,14 @@ export function Login() {
               onClick={() => setShowPassword(!showPassword)}
               aria-label={showPassword ? 'Hide password' : 'Show password'}
             >
-              {showPassword ? 'Hide' : 'Show'}
+              {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
             </button>
           </div>
+          {capsLockOn && (
+            <div className="capslock-hint" role="status">
+              Caps Lock is on
+            </div>
+          )}
 
           <div className="login-links login-links-end">
             <button
@@ -210,13 +228,11 @@ export function Login() {
                 <Loader2 size={16} className="spin" /> Verifying…
               </>
             ) : (
-              <>
-                Continue to portal <ChevronRight size={17} />
-              </>
+              'Sign in'
             )}
           </button>
           <div className="login-legal">
-            Credentials are checked by the OFIJANA examination server. Attempts are rate-limited.
+            Sign-ins are rate-limited to protect your account.
           </div>
         </form>
       </div>
