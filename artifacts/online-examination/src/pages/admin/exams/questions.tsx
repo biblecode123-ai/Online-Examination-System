@@ -46,6 +46,7 @@ interface QuestionFormState {
   instructions: string;
   options: OptionDraft[];
   matching_pairs: MatchingPairDraft[];
+  multiple_correct?: boolean;
 }
 
 export const SIMULATION_EXAMPLES = [
@@ -437,402 +438,395 @@ function QuestionDialog({
           </button>
         </div>
 
-        {/* ─── Simulation Examples Quick Loader ─── */}
-        <div
-          style={{
-            background: 'var(--bg-subtle, #f8fafc)',
-            border: '1px solid var(--border-color, #e2e8f0)',
-            borderRadius: '8px',
-            padding: '0.75rem 1rem',
-            marginBottom: '1rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '0.5rem',
-          }}
-          data-testid="simulation-examples-loader"
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <BookOpen size={16} style={{ color: 'var(--primary, #3b82f6)' }} />
-            <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Load Simulation Example:</span>
-          </div>
-          <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
-            {SIMULATION_EXAMPLES.map((ex) => (
-              <button
-                key={ex.code}
-                type="button"
-                className="button button-secondary button-sm"
-                title={ex.label}
-                onClick={() => {
-                  setForm({
-                    ...EMPTY_FORM,
-                    ...ex.state,
-                  });
-                  setClientError(null);
-                }}
-                data-testid={`button-load-example-${ex.code.toLowerCase()}`}
-              >
-                Ex {ex.code} ({ex.state.points}pt)
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <ErrorBox error={saveMutation.error} testId="question-save-error" />
-        {clientError && (
-          <div className="error-box" role="alert" data-testid="question-client-error">
-            {clientError}
-          </div>
-        )}
-
-        <div className="exam-form-grid">
-          <div className="form-group">
-            <label htmlFor="q-type">Question type</label>
-            <select
-              id="q-type"
-              className="select"
-              value={form.question_type}
-              onChange={(e) => handleTypeChange(e.target.value)}
-              data-testid="select-question-type"
-            >
-              {SUPPORTED_QUESTION_TYPES.map((type) => (
-                <option key={type.value} value={type.value}>
-                  {type.label}
-                </option>
-              ))}
-            </select>
-            <small className="field-hint">
-              Supports MCQ, True/False, Matching, Blank, and Essay formats.
-            </small>
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="q-points">Maximum points</label>
-            <input
-              id="q-points"
-              type="number"
-              min={1}
-              step={1}
-              value={form.points}
-              onChange={(e) =>
-                setForm({ ...form, points: Math.max(1, parseInt(e.target.value, 10) || 1) })
-              }
-              data-testid="input-question-points"
-            />
-            <small className="field-hint">
-              Independently configurable maximum points for this question.
-            </small>
-          </div>
-
-          <div className="form-group span-2">
-            <label htmlFor="q-instructions">Question instructions (optional)</label>
-            <input
-              id="q-instructions"
-              type="text"
-              value={form.instructions}
-              onChange={(e) => setForm({ ...form, instructions: e.target.value })}
-              placeholder="e.g. Select all that apply, or Answer in 200 words or less"
-              data-testid="input-question-instructions"
-            />
-          </div>
-
-          <div className="form-group span-2">
-            <label htmlFor="q-text">Question text</label>
-            <textarea
-              id="q-text"
-              rows={3}
-              value={form.question_text}
-              onChange={(e) => setForm({ ...form, question_text: e.target.value })}
-              data-testid="textarea-question-text"
-            />
-          </div>
-
-
-
-          <div className="form-group">
-            <label htmlFor="q-passage">Reading passage (optional)</label>
-            <select
-              id="q-passage"
-              className="select"
-              value={form.passage_id}
-              onChange={(e) => setForm({ ...form, passage_id: e.target.value })}
-              data-testid="select-question-passage"
-            >
-              <option value="">No passage</option>
-              {passages.map((passage) => (
-                <option key={passage.id} value={passage.id}>
-                  {passage.title || `Passage #${passage.id}`}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="form-group span-2">
-            <label htmlFor="q-image">Question image (optional)</label>
-            <input
-              id="q-image"
-              type="file"
-              accept="image/*"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) {
-                  const reader = new FileReader();
-                  reader.onload = () => setForm({ ...form, question_image: String(reader.result ?? '') });
-                  reader.readAsDataURL(file);
-                }
-              }}
-              data-testid="input-question-image"
-            />
-            {form.question_image && (
-              <img src={form.question_image} alt="preview" style={{ maxWidth: 240, marginTop: 8, borderRadius: 8 }} />
-            )}
-          </div>
-
-
-
-          {/* ─── Multiple Choice Options ─── */}
-          {isOptionsType && (
-            <div className="form-group span-2">
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: '0.5rem',
-                }}
-              >
-                <label style={{ margin: 0 }}>Answer options</label>
-
-              </div>
-              <small className="field-hint" style={{ display: 'block', marginBottom: '0.5rem' }}>
-                {form.multiple_correct
-                  ? 'Check all options that are correct. Students must select all correct options.'
-                  : 'Pick the single correct answer option.'}
-              </small>
-              <div className="options-editor" data-testid="options-editor">
-                {form.options.map((option, index) => (
-                  <div className="option-line" key={index}>
-                    <input
-                      type='radio'
-                      name="correct-option"
-                      checked={option.correct}
-                      onChange={() => {
-                        if (form.multiple_correct) {
-                          setOption(index, { correct: !option.correct }, false);
-                        } else {
-                          setOption(index, { correct: true }, true);
-                        }
-                      }}
-                      aria-label={`Mark option ${index + 1} correct`}
-                      data-testid={`correct-choice-${index}`}
-                    />
-                    <input
-                      type="text"
-                      value={option.text}
-                      placeholder={`Option ${index + 1}`}
-                      onChange={(e) => setOption(index, { text: e.target.value }, false)}
-                      data-testid={`input-option-${index}`}
-                    />
-                    <button
-                      type="button"
-                      className="icon-button"
-                      aria-label={`Remove option ${index + 1}`}
-                      disabled={form.options.length <= 2}
-                      onClick={() =>
-                        setForm((prev) => ({
-                          ...prev,
-                          options: prev.options.filter((_, i) => i !== index),
-                        }))
-                      }
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-                ))}
+        <div className="dialog-body">
+          {/* ─── Simulation Examples Quick Loader ─── */}
+          <div
+            style={{
+              background: 'var(--bg-subtle, #f8fafc)',
+              border: '1px solid var(--border-color, #e2e8f0)',
+              borderRadius: '8px',
+              padding: '0.75rem 1rem',
+              marginBottom: '1rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '0.5rem',
+            }}
+            data-testid="simulation-examples-loader"
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <BookOpen size={16} style={{ color: 'var(--primary, #3b82f6)' }} />
+              <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Load Simulation Example:</span>
+            </div>
+            <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+              {SIMULATION_EXAMPLES.map((ex) => (
                 <button
+                  key={ex.code}
                   type="button"
-                  className="button button-quiet button-sm"
-                  onClick={() =>
-                    setForm((prev) => ({
-                      ...prev,
-                      options: [...prev.options, { text: '', correct: false }],
-                    }))
-                  }
-                  data-testid="button-add-option"
+                  className="button button-secondary button-sm"
+                  title={ex.label}
+                  onClick={() => {
+                    setForm({
+                      ...EMPTY_FORM,
+                      ...ex.state,
+                    });
+                    setClientError(null);
+                  }}
+                  data-testid={`button-load-example-${ex.code.toLowerCase()}`}
                 >
-                  <Plus size={14} /> Add option
+                  Ex {ex.code} ({ex.state.points}pt)
                 </button>
-              </div>
+              ))}
+            </div>
+          </div>
+
+          <ErrorBox error={saveMutation.error} testId="question-save-error" />
+          {clientError && (
+            <div className="error-box" role="alert" data-testid="question-client-error">
+              {clientError}
             </div>
           )}
 
-          {/* ─── True / False ─── */}
-          {isTF && (
-            <div className="form-group span-2">
-              <label>Correct answer</label>
-              <div className="options-editor">
-                {['True', 'False'].map((value) => {
-                  const current = form.options.find((o) => o.text === value);
-                  return (
-                    <label key={value} className="checkbox-line">
-                      <input
-                        type="radio"
-                        name="tf-correct"
-                        checked={Boolean(current?.correct)}
-                        onChange={() =>
-                          setForm((prev) => ({
-                            ...prev,
-                            options: ['True', 'False'].map((v) => ({
-                              text: v,
-                              correct: v === value,
-                            })),
-                          }))
-                        }
-                      />
-                      {value}
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* ─── Matching Pairs ─── */}
-          {isMatching && (
-            <div className="form-group span-2">
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: '0.5rem',
-                }}
+          <div className="exam-form-grid">
+            <div className="form-group">
+              <label htmlFor="q-type">Question type</label>
+              <select
+                id="q-type"
+                className="select"
+                value={form.question_type}
+                onChange={(e) => handleTypeChange(e.target.value)}
+                data-testid="select-question-type"
               >
-                <label style={{ margin: 0 }}>Matching pairs (Left Item ↔ Right Match)</label>
-                <button
-                  type="button"
-                  className="button button-quiet button-sm"
-                  onClick={() =>
-                    setForm((prev) => ({
-                      ...prev,
-                      matching_pairs: [...prev.matching_pairs, { left: '', right: '' }],
-                    }))
-                  }
-                  data-testid="button-add-matching-pair"
-                >
-                  <Plus size={14} /> Add pair
-                </button>
-              </div>
-              <small className="field-hint" style={{ display: 'block', marginBottom: '0.75rem' }}>
-                Enter each item on the left and its matching partner on the right. Students will see the
-                right matches shuffled.
-              </small>
-              <div className="matching-pairs-editor" data-testid="matching-pairs-editor">
-                {form.matching_pairs.map((pair, index) => (
-                  <div
-                    key={index}
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: '1fr auto 1fr auto',
-                      gap: '0.5rem',
-                      alignItems: 'center',
-                      marginBottom: '0.5rem',
-                    }}
-                  >
-                    <input
-                      type="text"
-                      placeholder={`Left Item ${index + 1} (e.g. Mitochondria)`}
-                      value={pair.left}
-                      onChange={(e) => {
-                        const next = [...form.matching_pairs];
-                        next[index] = { ...next[index], left: e.target.value };
-                        setForm({ ...form, matching_pairs: next });
-                      }}
-                      data-testid={`input-matching-left-${index}`}
-                    />
-                    <span style={{ color: 'var(--text-muted)' }}>↔</span>
-                    <input
-                      type="text"
-                      placeholder={`Right Match ${index + 1} (e.g. ATP production)`}
-                      value={pair.right}
-                      onChange={(e) => {
-                        const next = [...form.matching_pairs];
-                        next[index] = { ...next[index], right: e.target.value };
-                        setForm({ ...form, matching_pairs: next });
-                      }}
-                      data-testid={`input-matching-right-${index}`}
-                    />
-                    <button
-                      type="button"
-                      className="icon-button"
-                      aria-label={`Remove pair ${index + 1}`}
-                      disabled={form.matching_pairs.length <= 2}
-                      onClick={() =>
-                        setForm((prev) => ({
-                          ...prev,
-                          matching_pairs: prev.matching_pairs.filter((_, i) => i !== index),
-                        }))
-                      }
-                      data-testid={`button-remove-matching-pair-${index}`}
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
+                {SUPPORTED_QUESTION_TYPES.map((type) => (
+                  <option key={type.value} value={type.value}>
+                    {type.label}
+                  </option>
                 ))}
-              </div>
+              </select>
+              <small className="field-hint">
+                Supports MCQ, True/False, Matching, Blank, and Essay formats.
+              </small>
             </div>
-          )}
 
-          {/* ─── Fill in the Blank ─── */}
-          {isBlank && (
-            <div className="form-group span-2">
-              <label htmlFor="q-answer">Expected answer</label>
+            <div className="form-group">
+              <label htmlFor="q-points">Maximum points</label>
               <input
-                id="q-answer"
-                type="text"
-                value={form.answer}
-                onChange={(e) => setForm({ ...form, answer: e.target.value })}
-                placeholder="The expected correct answer word or phrase"
-                data-testid="input-question-answer"
+                id="q-points"
+                type="number"
+                min={1}
+                step={1}
+                value={form.points}
+                onChange={(e) =>
+                  setForm({ ...form, points: Math.max(1, parseInt(e.target.value, 10) || 1) })
+                }
+                data-testid="input-question-points"
               />
               <small className="field-hint">
-                Evaluation is case-insensitive and trims leading/trailing spaces.
+                Independently configurable maximum points for this question.
               </small>
             </div>
-          )}
 
-          {/* ─── Essay ─── */}
-          {isEssay && (
             <div className="form-group span-2">
-              <div
-                style={{
-                  background: 'var(--bg-subtle, #f8fafc)',
-                  padding: '0.85rem',
-                  borderRadius: '6px',
-                  fontSize: '0.88rem',
-                  color: 'var(--text-muted)',
-                }}
-              >
-                Essay questions allow open-ended student text submissions up to 10,000 characters. They
-                are evaluated manually by the instructor using the scoring rubric provided above.
-              </div>
+              <label htmlFor="q-instructions">Question instructions (optional)</label>
+              <input
+                id="q-instructions"
+                type="text"
+                value={form.instructions}
+                onChange={(e) => setForm({ ...form, instructions: e.target.value })}
+                placeholder="e.g. Select all that apply, or Answer in 200 words or less"
+                data-testid="input-question-instructions"
+              />
             </div>
-          )}
-        </div>
 
-        {serverErrors && Object.keys(serverErrors).length > 0 && (
-          <ul className="blocker-list" data-testid="question-server-errors">
-            {Object.entries(serverErrors).flatMap(([field, messages]) =>
-              messages.map((message) => (
-                <li key={`${field}:${message}`}>
-                  <strong>{field}</strong> — {message}
-                </li>
-              )),
+            <div className="form-group span-2">
+              <label htmlFor="q-text">Question text</label>
+              <textarea
+                id="q-text"
+                rows={3}
+                value={form.question_text}
+                onChange={(e) => setForm({ ...form, question_text: e.target.value })}
+                data-testid="textarea-question-text"
+              />
+            </div>
+
+
+
+            <div className="form-group">
+              <label htmlFor="q-passage">Reading passage (optional)</label>
+              <select
+                id="q-passage"
+                className="select"
+                value={form.passage_id}
+                onChange={(e) => setForm({ ...form, passage_id: e.target.value })}
+                data-testid="select-question-passage"
+              >
+                <option value="">No passage</option>
+                {passages.map((passage) => (
+                  <option key={passage.id} value={passage.id}>
+                    {passage.title || `Passage #${passage.id}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group span-2">
+              <label htmlFor="q-image">Question image (optional)</label>
+              <input
+                id="q-image"
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = () => setForm({ ...form, question_image: String(reader.result ?? '') });
+                    reader.readAsDataURL(file);
+                  }
+                }}
+                data-testid="input-question-image"
+              />
+              {form.question_image && (
+                <img src={form.question_image} alt="preview" style={{ maxWidth: 240, marginTop: 8, borderRadius: 8 }} />
+              )}
+            </div>
+
+
+
+            {/* ─── Multiple Choice Options ─── */}
+            {isOptionsType && (
+              <div className="form-group span-2">
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '0.5rem',
+                  }}
+                >
+                  <label style={{ margin: 0 }}>Answer options</label>
+
+                </div>
+                <small className="field-hint" style={{ display: 'block', marginBottom: '0.5rem' }}>
+                  {form.multiple_correct
+                    ? 'Check all options that are correct. Students must select all correct options.'
+                    : 'Pick the single correct answer option.'}
+                </small>
+                <div className="options-editor" data-testid="options-editor">
+                  {form.options.map((option, index) => (
+                    <div className="option-line" key={index}>
+                      <input
+                        type='radio'
+                        name="correct-option"
+                        checked={option.correct}
+                        onChange={() => {
+                          if (form.multiple_correct) {
+                            setOption(index, { correct: !option.correct }, false);
+                          } else {
+                            setOption(index, { correct: true }, true);
+                          }
+                        }}
+                        aria-label={`Mark option ${index + 1} correct`}
+                        data-testid={`correct-choice-${index}`}
+                      />
+                      <input
+                        type="text"
+                        value={option.text}
+                        placeholder={`Option ${index + 1}`}
+                        onChange={(e) => setOption(index, { text: e.target.value }, false)}
+                        data-testid={`input-option-${index}`}
+                      />
+                      <button
+                        type="button"
+                        className="icon-button"
+                        aria-label={`Remove option ${index + 1}`}
+                        disabled={form.options.length <= 2}
+                        onClick={() =>
+                          setForm((prev) => ({
+                            ...prev,
+                            options: prev.options.filter((_, i) => i !== index),
+                          }))
+                        }
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    className="button button-quiet button-sm"
+                    onClick={() =>
+                      setForm((prev) => ({
+                        ...prev,
+                        options: [...prev.options, { text: '', correct: false }],
+                      }))
+                    }
+                    data-testid="button-add-option"
+                  >
+                    <Plus size={14} /> Add option
+                  </button>
+                </div>
+              </div>
             )}
-          </ul>
-        )}
 
+            {/* ─── True / False ─── */}
+            {isTF && (
+              <div className="form-group span-2">
+                <label>Correct answer</label>
+                <div className="options-editor">
+                  {['True', 'False'].map((value) => {
+                    const current = form.options.find((o) => o.text === value);
+                    return (
+                      <label key={value} className="checkbox-line">
+                        <input
+                          type="radio"
+                          name="tf-correct"
+                          checked={Boolean(current?.correct)}
+                          onChange={() =>
+                            setForm((prev) => ({
+                              ...prev,
+                              options: ['True', 'False'].map((v) => ({
+                                text: v,
+                                correct: v === value,
+                              })),
+                            }))
+                          }
+                        />
+                        {value}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* ─── Matching Pairs ─── */}
+            {isMatching && (
+              <div className="form-group span-2">
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '0.5rem',
+                  }}
+                >
+                  <label style={{ margin: 0 }}>Matching pairs (Left Item ↔ Right Match)</label>
+                  <button
+                    type="button"
+                    className="button button-quiet button-sm"
+                    onClick={() =>
+                      setForm((prev) => ({
+                        ...prev,
+                        matching_pairs: [...prev.matching_pairs, { left: '', right: '' }],
+                      }))
+                    }
+                    data-testid="button-add-matching-pair"
+                  >
+                    <Plus size={14} /> Add pair
+                  </button>
+                </div>
+                <small className="field-hint" style={{ display: 'block', marginBottom: '0.75rem' }}>
+                  Enter each item on the left and its matching partner on the right. Students will see the
+                  right matches shuffled.
+                </small>
+                <div className="matching-pairs-editor" data-testid="matching-pairs-editor">
+                  {form.matching_pairs.map((pair, index) => (
+                    <div key={index} className="matching-pair-row">
+                      <input
+                        type="text"
+                        placeholder={`Left Item ${index + 1} (e.g. Mitochondria)`}
+                        value={pair.left}
+                        onChange={(e) => {
+                          const next = [...form.matching_pairs];
+                          next[index] = { ...next[index], left: e.target.value };
+                          setForm({ ...form, matching_pairs: next });
+                        }}
+                        data-testid={`input-matching-left-${index}`}
+                      />
+                      <span className="pair-separator" style={{ color: 'var(--text-muted)' }}>↔</span>
+                      <input
+                        type="text"
+                        placeholder={`Right Match ${index + 1} (e.g. ATP production)`}
+                        value={pair.right}
+                        onChange={(e) => {
+                          const next = [...form.matching_pairs];
+                          next[index] = { ...next[index], right: e.target.value };
+                          setForm({ ...form, matching_pairs: next });
+                        }}
+                        data-testid={`input-matching-right-${index}`}
+                      />
+                      <button
+                        type="button"
+                        className="icon-button"
+                        aria-label={`Remove pair ${index + 1}`}
+                        disabled={form.matching_pairs.length <= 2}
+                        onClick={() =>
+                          setForm((prev) => ({
+                            ...prev,
+                            matching_pairs: prev.matching_pairs.filter((_, i) => i !== index),
+                          }))
+                        }
+                        data-testid={`button-remove-matching-pair-${index}`}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ─── Fill in the Blank ─── */}
+            {isBlank && (
+              <div className="form-group span-2">
+                <label htmlFor="q-answer">Expected answer</label>
+                <input
+                  id="q-answer"
+                  type="text"
+                  value={form.answer}
+                  onChange={(e) => setForm({ ...form, answer: e.target.value })}
+                  placeholder="The expected correct answer word or phrase"
+                  data-testid="input-question-answer"
+                />
+                <small className="field-hint">
+                  Evaluation is case-insensitive and trims leading/trailing spaces.
+                </small>
+              </div>
+            )}
+
+            {/* ─── Essay ─── */}
+            {isEssay && (
+              <div className="form-group span-2">
+                <div
+                  style={{
+                    background: 'var(--bg-subtle, #f8fafc)',
+                    padding: '0.85rem',
+                    borderRadius: '6px',
+                    fontSize: '0.88rem',
+                    color: 'var(--text-muted)',
+                  }}
+                >
+                  Essay questions allow open-ended student text submissions up to 10,000 characters. They
+                  are evaluated manually by the instructor using the scoring rubric provided above.
+                </div>
+              </div>
+            )}
+          </div>
+
+          {serverErrors && Object.keys(serverErrors).length > 0 && (
+            <ul className="blocker-list" data-testid="question-server-errors">
+              {Object.entries(serverErrors).flatMap(([field, messages]) =>
+                messages.map((message) => (
+                  <li key={`${field}:${message}`}>
+                    <strong>{field}</strong> — {message}
+                  </li>
+                )),
+              )}
+            </ul>
+          )}
+
+        </div>
         <div className="dialog-actions">
           <button type="button" className="button button-secondary" onClick={onClose}>
             Cancel
@@ -984,25 +978,27 @@ function ImportDialog({
             <X size={16} />
           </button>
         </div>
-        <p className="dialog-message">
-          Paste an array of question objects, for example:{' '}
-          <code>
-            {`[{"question_text": "…", "question_type": "multiple_choice", "points": 5, "difficulty": "medium", "options": [{"option_text": "A", "is_correct": true}]}]`}
-          </code>
-          . Everything is validated first; if any question is invalid, nothing is imported.
-        </p>
-        <textarea
-          rows={10}
-          className="code-textarea"
-          value={raw}
-          onChange={(e) => {
-            setRaw(e.target.value);
-            setParseError(null);
-          }}
-          spellCheck={false}
-          data-testid="textarea-import"
-        />
-        <ErrorBox error={parseError ? new Error(parseError) : importMutation.error} testId="import-error" />
+        <div className="dialog-body">
+          <p className="dialog-message">
+            Paste an array of question objects, for example:{' '}
+            <code>
+              {`[{"question_text": "…", "question_type": "multiple_choice", "points": 5, "difficulty": "medium", "options": [{"option_text": "A", "is_correct": true}]}]`}
+            </code>
+            . Everything is validated first; if any question is invalid, nothing is imported.
+          </p>
+          <textarea
+            rows={10}
+            className="code-textarea"
+            value={raw}
+            onChange={(e) => {
+              setRaw(e.target.value);
+              setParseError(null);
+            }}
+            spellCheck={false}
+            data-testid="textarea-import"
+          />
+          <ErrorBox error={parseError ? new Error(parseError) : importMutation.error} testId="import-error" />
+        </div>
         <div className="dialog-actions">
           <button type="button" className="button button-secondary" onClick={onClose}>
             Cancel

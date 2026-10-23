@@ -195,7 +195,7 @@ export function ExamDetails() {
           <p className="detail-course">
             {[exam.course?.name, exam.department?.name, exam.academic_year]
               .filter(Boolean)
-              .join(' · ') || 'Madda Walabu University'}
+              .join(' · ') || 'OFIJANA Online Examination System'}
           </p>
 
           <div className="detail-metrics">

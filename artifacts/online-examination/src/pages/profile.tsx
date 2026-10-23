@@ -147,7 +147,7 @@ export function Profile() {
           <div className="profile-fields">
             <ProfileField label="Full name" value={user.name} />
             <ProfileField label="Email address" value={user.email} />
-            <ProfileField label="Institution" value={universityName ?? 'Madda Walabu University'} />
+            <ProfileField label="Institution" value={universityName ?? 'OFIJANA Online Examination System'} />
             <ProfileField label="Department" value={departmentName ?? 'Not set'} />
             <ProfileField label="Plan" value={(user.plan_label ?? 'free').toUpperCase()} />
             <ProfileField label="Phone number" value={user.phone_number ?? ''} />

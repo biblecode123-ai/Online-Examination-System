@@ -163,8 +163,8 @@ export function TeacherShell({ children }: { children: React.ReactNode }) {
             <GraduationCap size={21} />
           </span>
           <span>
-            <strong>Ofijan Teacher</strong>
-            <small>Madda Walabu University</small>
+            <strong>OFIJANA</strong>
+            <small>Teacher Portal</small>
           </span>
         </Link>
         <div className="nav-caption">TEACHER SPACE</div>
@@ -236,8 +236,8 @@ export function TeacherShell({ children }: { children: React.ReactNode }) {
         <div className="content-area">{children}</div>
 
         <footer className="footer">
-          <span>Madda Walabu University · Ofijan Teacher</span>
-          <span>Powered by the Ofijan examination server</span>
+          <span>OFIJANA · Online Examination System</span>
+          <span>Powered by OFIJANA Examination Server</span>
         </footer>
       </main>
     </div>

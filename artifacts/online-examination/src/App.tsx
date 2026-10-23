@@ -228,8 +228,8 @@ function PortalShell({ children }: { children: React.ReactNode }) {
             <GraduationCap size={21} />
           </span>
           <span>
-            <strong>Ofijan ExamFlow</strong>
-            <small>Madda Walabu University</small>
+            <strong>OFIJANA</strong>
+            <small>Online Examination System</small>
           </span>
         </Link>
         <div className="nav-caption">STUDENT SPACE</div>
@@ -301,8 +301,8 @@ function PortalShell({ children }: { children: React.ReactNode }) {
         <div className="content-area">{children}</div>
 
         <footer className="footer">
-          <span>Madda Walabu University · Ofijan ExamFlow</span>
-          <span>Powered by the Ofijan examination server</span>
+          <span>OFIJANA · Online Examination System</span>
+          <span>Powered by OFIJANA Examination Server</span>
         </footer>
       </main>
     </div>

@@ -18,6 +18,11 @@ import { useAuth } from '../lib/auth';
 import { formatCountdown } from '../lib/format';
 import { isActiveAttempt } from '../lib/examState';
 import { attemptApi, examApi, isRealExam, realExamApi } from '../lib/endpoints';
+import {
+  buildQuestionGroups,
+  questionTypeLabel,
+  type QuestionGroup,
+} from '../lib/questionGroups';
 import type {
   Exam,
   QuestionPayload,
@@ -132,6 +137,22 @@ export function ExamAttempt() {
     () => questions.filter((question) => hasValue(answers[question.id])).length,
     [questions, answers],
   );
+
+  // ─── Shared instruction / passage groups (deterministic, order-preserving)
+  // A group is a contiguous run of questions sharing the same section,
+  // passage record (by ID) and instruction text. The shared content renders
+  // once per group — never merged across different groups or reordered.
+  const questionGroups = useMemo(
+    () => buildQuestionGroups(questions, sections),
+    [questions, sections],
+  );
+  const groupByIndex = useMemo(() => {
+    const map = new Map<number, QuestionGroup>();
+    for (const group of questionGroups) {
+      for (const index of group.indices) map.set(index, group);
+    }
+    return map;
+  }, [questionGroups]);
 
   const saveQuestion = useCallback(
     async (questionId: number, payload: SavedAnswer) => {
@@ -662,7 +683,7 @@ export function ExamAttempt() {
               <GraduationCap size={19} />
             </span>
             <span>
-              <strong>Madda Walabu</strong>
+              <strong>OFIJANA</strong>
               <small>Examination</small>
             </span>
           </Link>
@@ -728,6 +749,14 @@ export function ExamAttempt() {
     violationScore !== null && warnThreshold !== null && violationScore >= warnThreshold;
 
   const currentSection = getSectionForQuestion(question.id);
+  // Shared-content group of the question on screen. The group's instruction
+  // and passage render ONCE for the whole group (instruction first, then the
+  // passage, then the question and its answer controls), so navigating
+  // within the group never repeats them and never detaches them from their
+  // questions.
+  const currentGroup = groupByIndex.get(current) ?? null;
+  const groupInstruction = currentGroup?.instruction ?? null;
+  const groupPassage = currentGroup?.passage ?? null;
 
   return (
     <div className="attempt-page">
@@ -928,92 +957,74 @@ export function ExamAttempt() {
             <span className="marks-label">{question.points ?? 1} mark{(question.points ?? 1) === 1 ? '' : 's'}</span>
           </div>
 
-          <div className="question-content">
+          <div className={`question-content question-group${groupPassage ? ' question-group-split' : ''}`}>
             {settingsRef.current?.watermark_enabled && (
               <div className="exam-watermark" aria-hidden="true">
                 {settingsRef.current.watermark_text}
                 {user?.name ? ` · ${user.name}` : ''}
               </div>
             )}
-            <div className="question-type">
-              {question.question_type === 'essay' || question.question_type === 'blank'
-                ? 'WRITE YOUR ANSWER'
-                : question.question_type === 'matching'
-                  ? 'MATCH THE ITEMS'
-                  : question.question_type === 'true_false'
-                    ? 'TRUE OR FALSE'
-                    : question.multiple_correct ||
-                      question.options.length > 4 ||
-                      Boolean(question.instructions?.toLowerCase().includes('all that apply'))
-                      ? 'SELECT ALL THAT APPLY'
-                      : 'SELECT ONE'}
-            </div>
-            {question.passage && (
-              <div
-                className="question-passage"
-                style={{
-                  background: 'var(--bg-subtle, #f8fafc)',
-                  padding: '1rem',
-                  borderRadius: '8px',
-                  marginBottom: '1.25rem',
-                  borderLeft: '4px solid var(--primary, #3b82f6)',
-                }}
-                data-testid={`question-passage-${question.passage.id}`}
-              >
-                {question.passage.title && (
-                  <h4 style={{ margin: '0 0 0.5rem 0', fontWeight: 600 }}>{question.passage.title}</h4>
+
+            {/* Shared group context: instructions first, then the passage.
+                Rendered once per group — never repeated per question. */}
+            {(groupInstruction || groupPassage) && (
+              <div className="group-context">
+                {groupInstruction && (
+                  <div
+                    className="question-instructions-banner group-instructions-banner"
+                    data-testid="group-instructions-banner"
+                  >
+                    <strong>Instructions:</strong> {groupInstruction}
+                  </div>
                 )}
-                <div style={{ fontSize: '0.95rem', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>
-                  {question.passage.content}
+                {groupPassage && (
+                  <div
+                    className="question-passage group-passage-panel"
+                    data-testid={`question-passage-${groupPassage.id}`}
+                  >
+                    {groupPassage.title && <h4>{groupPassage.title}</h4>}
+                    <div className="passage-body">{groupPassage.content}</div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="group-questions">
+              <div className="question-type">{questionTypeLabel(question)}</div>
+              {question.question_image && (
+                <div className="question-image" style={{ marginBottom: '1rem' }}>
+                  <img
+                    src={question.question_image}
+                    alt="Question visual"
+                    style={{ maxWidth: '100%', maxHeight: '350px', borderRadius: '6px' }}
+                  />
                 </div>
-              </div>
-            )}
-            {question.question_image && (
-              <div className="question-image" style={{ marginBottom: '1rem' }}>
-                <img
-                  src={question.question_image}
-                  alt="Question visual"
-                  style={{ maxWidth: '100%', maxHeight: '350px', borderRadius: '6px' }}
-                />
-              </div>
-            )}
-            {question.instructions && (
-              <div
-                className="question-instructions-banner"
-                style={{
-                  fontSize: '0.88rem',
-                  fontStyle: 'italic',
-                  color: 'var(--text-muted)',
-                  marginBottom: '0.75rem',
-                }}
+              )}
+              <h1>{question.question_text}</h1>
+
+              <AnswerField
+                question={question}
+                value={answers[question.id]}
+                disabled={readOnly}
+                onChange={(payload) => updateAnswer(question.id, payload)}
+              />
+
+              <button
+                type="button"
+                className={`review-toggle${review.includes(question.id) ? ' review-on' : ''}`}
+                onClick={() =>
+                  setReview((previous) =>
+                    previous.includes(question.id)
+                      ? previous.filter((id) => id !== question.id)
+                      : [...previous, question.id],
+                  )
+                }
+                data-testid="button-mark-review"
               >
-                {question.instructions}
-              </div>
-            )}
-            <h1>{question.question_text}</h1>
-
-            <AnswerField
-              question={question}
-              value={answers[question.id]}
-              disabled={readOnly}
-              onChange={(payload) => updateAnswer(question.id, payload)}
-            />
-
-            <button
-              type="button"
-              className={`review-toggle${review.includes(question.id) ? ' review-on' : ''}`}
-              onClick={() =>
-                setReview((previous) =>
-                  previous.includes(question.id)
-                    ? previous.filter((id) => id !== question.id)
-                    : [...previous, question.id],
-                )
-              }
-              data-testid="button-mark-review"
-            >
-              {review.includes(question.id) ? <Check size={16} /> : <span className="review-flag" />}
-              {review.includes(question.id) ? 'Marked for review' : 'Mark for review'}
-            </button>
+                {review.includes(question.id) ? <Check size={16} /> : <span className="review-flag" />}
+                {review.includes(question.id) ? 'Marked for review' : 'Mark for review'}
+              </button>
+            </div>
           </div>
 
           <div className="question-controls">

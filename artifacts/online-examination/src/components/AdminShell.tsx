@@ -163,8 +163,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             <ShieldCheck size={21} />
           </span>
           <span>
-            <strong>Ofijan Admin</strong>
-            <small>Madda Walabu University</small>
+            <strong>OFIJANA</strong>
+            <small>Administrator Portal</small>
           </span>
         </Link>
         <div className="nav-caption">ADMINISTRATION</div>
@@ -237,8 +237,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         <div className="content-area">{children}</div>
 
         <footer className="footer">
-          <span>Madda Walabu University · Ofijan Admin</span>
-          <span>Powered by the Ofijan examination server</span>
+          <span>OFIJANA · Online Examination System</span>
+          <span>Powered by OFIJANA Examination Server</span>
         </footer>
       </main>
     </div>

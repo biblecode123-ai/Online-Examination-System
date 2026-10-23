@@ -106,29 +106,29 @@ export function Login() {
             <GraduationCap size={22} />
           </span>
           <span>
-            <strong>Madda Walabu</strong>
-            <small>UNIVERSITY EXAMINATIONS</small>
+            <strong>OFIJANA</strong>
+            <small>ONLINE EXAMINATION SYSTEM</small>
           </span>
         </div>
         <div className="login-copy">
-          <div className="eyebrow">STUDENT EXAMINATION PORTAL</div>
+          <div className="eyebrow">EXAMINATION PORTAL</div>
           <h1>
             Exams, with
             <br />
             <em>clarity.</em>
           </h1>
-          <p>Your schedule, assessments and outcomes in one secure student space.</p>
+          <p>Your schedule, assessments and outcomes in one secure space.</p>
           <div className="login-assurance">
             <ShieldCheck size={18} />
             <span>
-              Student access only
+              Secure access
               <br />
-              <small>Sign-in is verified by the university examination server.</small>
+              <small>Sign-in is verified by the OFIJANA examination server.</small>
             </span>
           </div>
         </div>
         <div className="login-footer">
-          MADDA WALABU UNIVERSITY <span>·</span> ONLINE EXAMINATIONS
+          OFIJANA <span>·</span> ONLINE EXAMINATION SYSTEM
         </div>
       </div>
 
@@ -216,7 +216,7 @@ export function Login() {
             )}
           </button>
           <div className="login-legal">
-            Credentials are checked by the Ofijan examination server. Attempts are rate-limited.
+            Credentials are checked by the OFIJANA examination server. Attempts are rate-limited.
           </div>
         </form>
       </div>
