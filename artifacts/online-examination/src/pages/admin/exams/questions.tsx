@@ -261,7 +261,8 @@ function toPayload(
   examId: number,
 ): { payload: AdminQuestionInput; error?: string } {
   const text = form.question_text.trim();
-  if (!text) return { payload: {} as AdminQuestionInput, error: 'Question text is required.' };
+  if (form.question_type !== 'matching' && !text)
+    return { payload: {} as AdminQuestionInput, error: 'Question text is required.' };
   const points = Number(form.points);
   if (!Number.isFinite(points) || points <= 0 || !Number.isInteger(points))
     return { payload: {} as AdminQuestionInput, error: 'Maximum points must be an integer greater than zero.' };
@@ -581,6 +582,7 @@ function QuestionDialog({
               />
             </div>
 
+{!isMatching && (
             <div className="form-group span-2">
               <label htmlFor="q-text">Question text</label>
               <textarea
@@ -591,6 +593,7 @@ function QuestionDialog({
                 data-testid="textarea-question-text"
               />
             </div>
+          )}
 
 
 
