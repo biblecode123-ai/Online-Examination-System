@@ -10,6 +10,7 @@ import {
   Pencil,
   Plus,
   Save,
+  Search,
   Trash2,
   Upload,
   X,
@@ -331,7 +332,7 @@ function QuestionDialog({
 }: {
   exam: AdminRealExam;
   editing: AdminQuestionRow | null;
-  passages: { id: number; title?: string | null }[];
+  passages: { id: number; title?: string | null; content?: string | null }[];
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -339,6 +340,11 @@ function QuestionDialog({
     editing ? formFromQuestion(editing) : EMPTY_FORM,
   );
   const [clientError, setClientError] = useState<string | null>(null);
+  // Passage attachment is opt-in: the checkbox gates the whole passage UI,
+  // and unchecking it drops any previously assigned passage.
+  const [usePassage, setUsePassage] = useState(Boolean(form.passage_id));
+  const [passageSearch, setPassageSearch] = useState('');
+  const [newPassage, setNewPassage] = useState({ title: '', content: '' });
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['admin-exam-questions', exam.id] });
@@ -357,6 +363,22 @@ function QuestionDialog({
     onSuccess: () => {
       invalidate();
       onClose();
+    },
+  });
+
+  const createPassageMutation = useMutation({
+    mutationFn: () => {
+      const title = newPassage.title.trim();
+      const content = newPassage.content.trim();
+      if (!content) return Promise.reject(new Error('Write the passage text before saving.'));
+      return adminExamApi.createPassage(title ? { title, content } : { content });
+    },
+    onSuccess: (passage) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-passages'] });
+      setForm((prev) => ({ ...prev, passage_id: String(passage.id) }));
+      setNewPassage({ title: '', content: '' });
+      setPassageSearch('');
+      setClientError(null);
     },
   });
 
@@ -410,6 +432,25 @@ function QuestionDialog({
   const isMatching = form.question_type === 'matching';
   const isBlank = form.question_type === 'blank';
   const isEssay = form.question_type === 'essay';
+  // Shared media (reading passage + image) is only offered for types where it
+  // reads naturally — matching and blank questions are pair/text exercises.
+  // Any values already set are preserved in state and sent with the payload.
+  const showSharedMedia = !isMatching && !isBlank;
+
+  // Searchable passage picker: filter by title or content, capped for perf.
+  const filteredPassages = useMemo(() => {
+    const query = passageSearch.trim().toLowerCase();
+    if (!query) return passages.slice(0, 40);
+    return passages
+      .filter(
+        (passage) =>
+          (passage.title ?? '').toLowerCase().includes(query) ||
+          (passage.content ?? '').toLowerCase().includes(query),
+      )
+      .slice(0, 40);
+  }, [passages, passageSearch]);
+
+  const attachedPassage = passages.find((passage) => String(passage.id) === form.passage_id);
 
   const serverErrors =
     saveMutation.error instanceof Error && 'errors' in saveMutation.error
@@ -471,6 +512,7 @@ function QuestionDialog({
                       ...EMPTY_FORM,
                       ...ex.state,
                     });
+                    setUsePassage(false);
                     setClientError(null);
                   }}
                   data-testid={`button-load-example-${ex.code.toLowerCase()}`}
@@ -552,24 +594,142 @@ function QuestionDialog({
 
 
 
-            <div className="form-group">
-              <label htmlFor="q-passage">Reading passage (optional)</label>
-              <select
-                id="q-passage"
-                className="select"
-                value={form.passage_id}
-                onChange={(e) => setForm({ ...form, passage_id: e.target.value })}
-                data-testid="select-question-passage"
-              >
-                <option value="">No passage</option>
-                {passages.map((passage) => (
-                  <option key={passage.id} value={passage.id}>
-                    {passage.title || `Passage #${passage.id}`}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {showSharedMedia && (
+            <div className="form-group span-2 passage-attachment">
+              <label className="passage-toggle" htmlFor="q-passage-toggle">
+                <input
+                  id="q-passage-toggle"
+                  type="checkbox"
+                  checked={usePassage}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setUsePassage(checked);
+                    if (!checked) {
+                      setForm((prev) => ({ ...prev, passage_id: '' }));
+                      setClientError(null);
+                    }
+                  }}
+                  data-testid="checkbox-question-passage"
+                />
+                <span>
+                  <strong>Needs a reading passage</strong>
+                  <small>
+                    Write a passage once and attach questions to it — students see the passage a
+                    single time above the group of questions that share it.
+                  </small>
+                </span>
+              </label>
 
+              {usePassage && (
+                <div className="passage-attach" data-testid="passage-attach-panel">
+                  {form.passage_id && (
+                    <div className="passage-attached" data-testid="passage-attached-chip">
+                      <BookOpen size={14} />
+                      <span>
+                        Attached: <strong>{attachedPassage?.title || `Passage #${form.passage_id}`}</strong>
+                      </span>
+                      <button
+                        type="button"
+                        className="icon-button"
+                        aria-label="Remove passage"
+                        onClick={() => {
+                          setForm((prev) => ({ ...prev, passage_id: '' }));
+                          setUsePassage(false);
+                        }}
+                        data-testid="button-detach-passage"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="passage-search">
+                    <Search size={14} />
+                    <input
+                      type="search"
+                      value={passageSearch}
+                      placeholder="Search passages by title or content…"
+                      onChange={(e) => setPassageSearch(e.target.value)}
+                      aria-label="Search passages"
+                      data-testid="input-passage-search"
+                    />
+                  </div>
+
+                  {filteredPassages.length === 0 ? (
+                    <small className="text-muted passage-empty" data-testid="passage-search-empty">
+                      {passages.length === 0
+                        ? 'No passages yet — write the first one below.'
+                        : `No passages match “${passageSearch.trim()}”.`}
+                    </small>
+                  ) : (
+                    <ul className="passage-picker" data-testid="passage-picker-list">
+                      {filteredPassages.map((passage) => {
+                        const selected = String(passage.id) === form.passage_id;
+                        return (
+                          <li key={passage.id}>
+                            <button
+                              type="button"
+                              className={`passage-option${selected ? ' is-selected' : ''}`}
+                              aria-pressed={selected}
+                              onClick={() =>
+                                setForm((prev) => ({ ...prev, passage_id: String(passage.id) }))
+                              }
+                              data-testid={`passage-option-${passage.id}`}
+                            >
+                              <strong>{passage.title || `Passage #${passage.id}`}</strong>
+                              <small>
+                                {(passage.content ?? '').slice(0, 140) || 'Empty passage'}
+                              </small>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+
+                  <div className="passage-new">
+                    <div className="passage-new-label">or write a new passage</div>
+                    <input
+                      type="text"
+                      placeholder="Passage title (optional)"
+                      value={newPassage.title}
+                      onChange={(e) =>
+                        setNewPassage((prev) => ({ ...prev, title: e.target.value }))
+                      }
+                      data-testid="input-passage-title"
+                    />
+                    <textarea
+                      rows={4}
+                      placeholder="Paste or type the reading passage students will see…"
+                      value={newPassage.content}
+                      onChange={(e) =>
+                        setNewPassage((prev) => ({ ...prev, content: e.target.value }))
+                      }
+                      data-testid="textarea-passage-content"
+                    />
+                    <div className="passage-new-actions">
+                      <small className="field-hint">
+                        Saved passages are reusable by any question in any exam.
+                      </small>
+                      <button
+                        type="button"
+                        className="button button-secondary button-sm"
+                        disabled={createPassageMutation.isPending || !newPassage.content.trim()}
+                        onClick={() => createPassageMutation.mutate()}
+                        data-testid="button-create-passage"
+                      >
+                        <Plus size={14} />{' '}
+                        {createPassageMutation.isPending ? 'Saving…' : 'Create & attach'}
+                      </button>
+                    </div>
+                    <ErrorBox error={createPassageMutation.error} testId="passage-create-error" />
+                  </div>
+                </div>
+              )}
+            </div>
+            )}
+
+            {showSharedMedia && (
             <div className="form-group span-2">
               <label htmlFor="q-image">Question image (optional)</label>
               <input
@@ -590,6 +750,7 @@ function QuestionDialog({
                 <img src={form.question_image} alt="preview" style={{ maxWidth: 240, marginTop: 8, borderRadius: 8 }} />
               )}
             </div>
+            )}
 
 
 
@@ -837,8 +998,13 @@ function QuestionDialog({
             disabled={saveMutation.isPending}
             onClick={() => {
               const { error } = toPayload(form, exam.id);
-              setClientError(error ?? null);
-              if (!error) saveMutation.mutate();
+              const passageError =
+                showSharedMedia && usePassage && !form.passage_id
+                  ? 'Pick a passage from the list above, create one below, or uncheck "Needs a reading passage".'
+                  : null;
+              const message = passageError ?? error ?? null;
+              setClientError(message);
+              if (!message) saveMutation.mutate();
             }}
             data-testid="button-save-question"
           >
