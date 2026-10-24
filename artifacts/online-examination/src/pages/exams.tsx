@@ -102,13 +102,7 @@ export function ExamList() {
 
   const visibleExams = useMemo(() => {
     const rows = examsQuery.data?.data ?? [];
-    return rows.filter(
-      (exam) =>
-        isRealExam(exam) &&
-        (!exam.department_id ||
-          !user?.department_id ||
-          Number(exam.department_id) === Number(user.department_id)),
-    );
+return rows.filter((exam) => isRealExam(exam));
   }, [examsQuery.data, user?.department_id]);
 
   return (
