@@ -401,6 +401,24 @@ export const adminApi = {
     return body;
   },
 
+  /**
+   * Every teacher account id (GET /admin/users?role=teacher, all pages) —
+   * the admin results page lists only the examinations these users created.
+   */
+  async listTeacherIds(signal?: AbortSignal): Promise<number[]> {
+    const ids: number[] = [];
+    for (let page = 1; page <= 20; page += 1) {
+      const body = await apiRequest<Paginated<User>>('/v1/admin/users', {
+        query: { role: 'teacher', page, per_page: 100 },
+        signal,
+      });
+      const rows = body?.data ?? [];
+      ids.push(...rows.map((user) => user.id));
+      if (rows.length === 0 || page >= (body?.meta?.last_page ?? 1)) break;
+    }
+    return ids;
+  },
+
   /** POST /admin/users — create a new user. */
   async createUser(data: {
     name: string;

@@ -875,47 +875,42 @@ export function ExamAttempt() {
         </div>
       )}
 
-      <div className="attempt-body">
-        <aside className="question-nav panel">
-          <div className="eyebrow">QUESTION NAVIGATION</div>
-          <div className="question-nav-summary">
-            <strong data-testid="answered-count">
-              {answeredCount} of {total}
-            </strong>
-            <span>answered</span>
-          </div>
-          <div className="progress-track">
-            <i style={{ width: `${total ? (answeredCount / total) * 100 : 0}%` }} />
-          </div>
-          <div className="question-grid">
+        <div className="attempt-body">
+        <aside className="question-list-flags panel">
+          <div className="eyebrow">QUESTIONS</div>
+          <div className="question-flags-list">
             {questions.map((item, index) => (
-              <button
+              <div
                 key={item.id}
-                data-testid={`button-question-${index + 1}`}
-                aria-label={`Go to question ${index + 1}${review.includes(item.id) ? ', marked for review' : ''}`}
-                onClick={() => setCurrent(index)}
-                className={`question-number${index === current ? ' question-current' : ''}${
-                  hasValue(answers[item.id]) ? ' question-answered' : ''
-                }${review.includes(item.id) ? ' question-review' : ''}`}
+                className={`question-flag-row${index === current ? ' question-flag-row-current' : ''}${
+                  hasValue(answers[item.id]) ? ' question-flag-row-answered' : ''
+                }`}
               >
-                {index + 1}
-              </button>
+                <button
+                  className="question-flag-number"
+                  onClick={() => setCurrent(index)}
+                  aria-label={`Go to question ${index + 1}`}
+                >
+                  {index + 1}
+                </button>
+                <button
+                  type="button"
+                  className={`question-flag-toggle${review.includes(item.id) ? ' question-flag-toggle-on' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setReview((previous) =>
+                      previous.includes(item.id)
+                        ? previous.filter((id) => id !== item.id)
+                        : [...previous, item.id],
+                    );
+                  }}
+                  aria-label={`Mark question ${index + 1} for review`}
+                >
+                  <span className="review-flag" />
+                  {review.includes(item.id) ? 'Flagged' : 'Flag'}
+                </button>
+              </div>
             ))}
-          </div>
-          <div className="legend">
-            <span>
-              <i className="legend-answer" /> Answered
-            </span>
-            <span>
-              <i className="legend-review" /> Review
-            </span>
-            <span>
-              <i className="legend-current" /> Current
-            </span>
-          </div>
-          <div className="nav-help">
-            Answers are stored on the examination server as you work. Keep this window open until
-            you submit.
           </div>
         </aside>
 
@@ -1056,6 +1051,49 @@ export function ExamAttempt() {
             )}
           </div>
         </section>
+
+        <aside className="question-nav panel">
+          <div className="eyebrow">QUESTION NAVIGATION</div>
+          <div className="question-nav-summary">
+            <strong data-testid="answered-count">
+              {answeredCount} of {total}
+            </strong>
+            <span>answered</span>
+          </div>
+          <div className="progress-track">
+            <i style={{ width: `${total ? (answeredCount / total) * 100 : 0}%` }} />
+          </div>
+          <div className="question-grid">
+            {questions.map((item, index) => (
+              <button
+                key={item.id}
+                data-testid={`button-question-${index + 1}`}
+                aria-label={`Go to question ${index + 1}${review.includes(item.id) ? ', marked for review' : ''}`}
+                onClick={() => setCurrent(index)}
+                className={`question-number${index === current ? ' question-current' : ''}${
+                  hasValue(answers[item.id]) ? ' question-answered' : ''
+                }${review.includes(item.id) ? ' question-review' : ''}`}
+              >
+                {index + 1}
+              </button>
+            ))}
+          </div>
+          <div className="legend">
+            <span>
+              <i className="legend-answer" /> Answered
+            </span>
+            <span>
+              <i className="legend-review" /> Review
+            </span>
+            <span>
+              <i className="legend-current" /> Current
+            </span>
+          </div>
+          <div className="nav-help">
+            Answers are stored on the examination server as you work. Keep this window open until
+            you submit.
+          </div>
+        </aside>
       </div>
 
       {lockedNow && (

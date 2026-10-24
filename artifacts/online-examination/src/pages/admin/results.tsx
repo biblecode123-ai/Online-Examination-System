@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'wouter';
 import {
@@ -10,6 +10,8 @@ import {
   Download,
   FileCheck2,
   Hourglass,
+  ListChecks,
+  MinusCircle,
   Percent,
   Printer,
   RotateCcw,
@@ -23,7 +25,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { adminApi, adminExamApi } from '../../lib/endpoints';
-import { useAdminExamResults, useAdminResultOptions, useAdminResults } from '../../lib/queries';
+import { useAdminExamResults, useAdminResult, useAdminResultOptions, useAdminResults } from '../../lib/queries';
 import { dateLabel } from '../../lib/format';
 import { Button, EmptyState, ErrorBox, LoadingBlock, PageTitle, Status } from '../../components/shell';
 import type {
@@ -160,12 +162,115 @@ function ScoreDistribution({ buckets }: { buckets: AdminScoreBucket[] }) {
   );
 }
 
+/**
+ * Compact per-student question breakdown: what the student got right, got
+ * wrong and left unanswered, straight from the attempt's question review.
+ */
+function AttemptQuestions({ attemptId }: { attemptId: number }) {
+  const query = useAdminResult(String(attemptId));
+
+  if (query.isPending) {
+    return <LoadingBlock label="Loading question breakdown…" />;
+  }
+
+  if (query.isError || !query.data) {
+    return (
+      <ErrorBox
+        error={query.error}
+        onRetry={() => void query.refetch()}
+        retryLabel="Reload"
+      />
+    );
+  }
+
+  const review = query.data.question_review ?? [];
+  if (review.length === 0) {
+    return (
+      <EmptyState
+        icon={<FileCheck2 size={23} />}
+        title="No answer record"
+        description="The examination server holds no answer record for this attempt."
+      />
+    );
+  }
+
+  const correct = review.filter(
+    (item) => item.student_answer.answer_status === 'correct',
+  ).length;
+  const wrong = review.filter(
+    (item) => item.student_answer.answer_status === 'incorrect',
+  ).length;
+  const missed = review.length - correct - wrong;
+
+  return (
+    <div className="attempt-questions" data-testid={`attempt-questions-${attemptId}`}>
+      <div className="attempt-questions-head">
+        <strong>Questions got &amp; missed</strong>
+        <span className="attempt-questions-legend">
+          <em className="status-correct">
+            <CheckCircle2 size={13} /> {correct} correct
+          </em>
+          <em className="status-incorrect">
+            <XCircle size={13} /> {wrong} incorrect
+          </em>
+          <em className="muted">
+            <MinusCircle size={13} /> {missed} unanswered
+          </em>
+        </span>
+      </div>
+      {review.map((item) => {
+        const status = item.student_answer.answer_status;
+        const tone =
+          status === 'correct' ? 'correct' : status === 'unanswered' ? 'missed' : 'incorrect';
+        return (
+          <div className={`review-answer ${tone}`} key={item.question_id}>
+            <span>{String(item.question_number).padStart(2, '0')}</span>
+            <div>
+              <div className="review-answer-head">
+                <strong>{item.question_text}</strong>
+                <span className="review-answer-points">
+                  {item.awarded_points} / {item.max_points} pt
+                </span>
+              </div>
+              <small>
+                <span
+                  className={
+                    status === 'correct'
+                      ? 'status-correct'
+                      : status === 'unanswered'
+                        ? 'muted'
+                        : 'status-incorrect'
+                  }
+                >
+                  {status === 'correct'
+                    ? 'Correct'
+                    : status === 'unanswered'
+                      ? 'Not answered'
+                      : 'Incorrect'}
+                </span>
+                {' · '}Student response:{' '}
+                {item.student_answer.selected_option_text ||
+                  item.student_answer.answer_text ||
+                  'none'}
+              </small>
+              {item.correct_answer.option_text && status !== 'correct' && (
+                <small>Correct answer: {item.correct_answer.option_text}</small>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function AdminResults() {
   const [params, setParams] = useSearchParams();
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<unknown>(null);
   const [selectedExamId, setSelectedExamId] = useState<number | null>(null);
   const [examPage, setExamPage] = useState(1);
+  const [expandedAttemptId, setExpandedAttemptId] = useState<number | null>(null);
 
   const urlSearch = params.get('search') ?? '';
   const [searchInput, setSearchInput] = useState(urlSearch);
@@ -218,10 +323,18 @@ export function AdminResults() {
   const optionsQuery = useAdminResultOptions();
   const examSummaryQuery = useAdminExamResults(filters.exam_id ?? null);
 
-  // Fetch exams with pagination
+  // The governed exam list; pagination below is client-side over this list.
   const examsQuery = useQuery({
-    queryKey: ['admin-exams-list', examPage],
-    queryFn: () => adminExamApi.listExams(),
+    queryKey: ['admin-exams-list'],
+    queryFn: ({ signal }) => adminExamApi.listExams(signal),
+  });
+
+  // Teacher account ids — this page only lists the exams those users created.
+  const teachersQuery = useQuery({
+    queryKey: ['admin-teacher-ids'],
+    queryFn: ({ signal }) => adminApi.listTeacherIds(signal),
+    staleTime: 5 * 60_000,
+    retry: 1,
   });
 
   const options = optionsQuery.data;
@@ -311,11 +424,39 @@ export function AdminResults() {
     updateParam('exam_id', undefined);
   };
 
-  // Client-side pagination for exams
+  // Client-side pagination over the teacher-created exam list. When the backend
+  // sends no created_by at all (or no teacher ids could be loaded) the creators
+  // cannot be told apart, so the unfiltered list is shown rather than nothing.
   const allExams = examsQuery.data?.items ?? [];
-  const totalExams = examsQuery.data?.total ?? 0;
-  const examLastPage = examsQuery.data?.lastPage ?? 1;
-  const paginatedExams = allExams.slice((examPage - 1) * EXAMS_PER_PAGE, examPage * EXAMS_PER_PAGE);
+  const teacherIdSet = teachersQuery.data ? new Set(teachersQuery.data) : null;
+  const creatorInfoPresent = allExams.some((exam) => exam.created_by != null);
+  const teacherExams = useMemo(() => {
+    if (!teacherIdSet || teacherIdSet.size === 0 || !creatorInfoPresent) return allExams;
+    return allExams.filter(
+      (exam) => exam.created_by != null && teacherIdSet.has(exam.created_by),
+    );
+  }, [allExams, teacherIdSet, creatorInfoPresent]);
+  const totalExams = teacherExams.length;
+  const examLastPage = Math.max(1, Math.ceil(totalExams / EXAMS_PER_PAGE));
+  const currentExamPage = Math.min(examPage, examLastPage);
+  const paginatedExams = teacherExams.slice(
+    (currentExamPage - 1) * EXAMS_PER_PAGE,
+    currentExamPage * EXAMS_PER_PAGE,
+  );
+
+  // The Examination dropdown mirrors the teacher-only scope of the list above.
+  const examFilterOptions = useMemo(() => {
+    const all = options?.exams ?? [];
+    if (!teacherIdSet || teacherIdSet.size === 0 || !creatorInfoPresent) return all;
+    const ids = new Set(teacherExams.map((exam) => exam.id));
+    const filtered = all.filter((exam) => ids.has(exam.id));
+    // Keep whatever exam is already selected visible even if it is out of scope.
+    if (filters.exam_id !== undefined && !filtered.some((exam) => exam.id === filters.exam_id)) {
+      const current = all.find((exam) => exam.id === filters.exam_id);
+      if (current) filtered.push(current);
+    }
+    return filtered;
+  }, [options, teacherIdSet, creatorInfoPresent, teacherExams, filters.exam_id]);
 
   const filterSummary = useMemo(() => {
     const parts: string[] = [];
@@ -509,7 +650,7 @@ export function AdminResults() {
                 }
               >
                 <option value="">All examinations</option>
-                {(options?.exams ?? []).map((exam) => (
+                {examFilterOptions.map((exam) => (
                   <option key={exam.id} value={exam.id}>
                     {exam.title}
                   </option>
@@ -639,17 +780,17 @@ export function AdminResults() {
       {!selectedExamId && !filters.exam_id && (
         <section className="admin-panel" style={{ marginTop: 16 }}>
           <div className="admin-panel-header">
-            <h2>Examinations</h2>
+            <h2>Examinations created by teachers</h2>
             <span className="admin-panel-badge">{totalExams} exam(s)</span>
           </div>
           <div className="admin-panel-body">
-            {examsQuery.isPending ? (
+            {examsQuery.isPending || teachersQuery.isPending ? (
               <LoadingBlock label="Loading examinations…" />
             ) : paginatedExams.length === 0 ? (
               <EmptyState
                 icon={<BookOpen size={23} />}
-                title="No examinations found"
-                description="No examinations have been created yet."
+                title="No teacher-created examinations"
+                description="Examinations appear here once a teacher creates one."
               />
             ) : (
               <>
@@ -730,20 +871,20 @@ export function AdminResults() {
                 {examLastPage > 1 && (
                   <div className="pagination-row" style={{ marginTop: '1rem' }}>
                     <span>
-                      Page {examPage} of {examLastPage} · {totalExams} exam(s)
+                      Page {currentExamPage} of {examLastPage} · {totalExams} exam(s)
                     </span>
                     <div className="pagination-controls">
                       <Button
                         variant="secondary"
-                        disabled={examPage <= 1}
-                        onClick={() => setExamPage(examPage - 1)}
+                        disabled={currentExamPage <= 1}
+                        onClick={() => setExamPage(currentExamPage - 1)}
                       >
                         <ChevronLeft size={14} /> Previous
                       </Button>
                       <Button
                         variant="secondary"
-                        disabled={examPage >= examLastPage}
-                        onClick={() => setExamPage(examPage + 1)}
+                        disabled={currentExamPage >= examLastPage}
+                        onClick={() => setExamPage(currentExamPage + 1)}
                       >
                         Next <ChevronRight size={14} />
                       </Button>
@@ -864,7 +1005,8 @@ export function AdminResults() {
               </thead>
               <tbody>
                 {rows.map((row) => (
-                  <tr key={row.id} data-testid={`row-result-${row.id}`}>
+                  <Fragment key={row.id}>
+                  <tr data-testid={`row-result-${row.id}`}>
                     <td>
                       <div className="user-cell">
                         <div className="user-avatar">
@@ -938,15 +1080,40 @@ export function AdminResults() {
                     <td>{dateLabel(row.start_time)}</td>
                     <td>{dateLabel(row.completed_at ?? row.end_time)}</td>
                     <td>
-                      <Link
-                        href={`/admin/results/${row.id}`}
-                        className="text-link"
-                        data-testid={`link-result-${row.id}`}
-                      >
-                        Review <ChevronRight size={14} />
-                      </Link>
+                      <div className="action-buttons">
+                        <button
+                          type="button"
+                          className="text-link"
+                          aria-expanded={expandedAttemptId === row.id}
+                          onClick={() =>
+                            setExpandedAttemptId((prev) => (prev === row.id ? null : row.id))
+                          }
+                          data-testid={`button-questions-${row.id}`}
+                        >
+                          <ListChecks size={14} />
+                          {expandedAttemptId === row.id ? 'Hide' : 'Questions'}
+                        </button>
+                        <Link
+                          href={`/admin/results/${row.id}`}
+                          className="text-link"
+                          data-testid={`link-result-${row.id}`}
+                        >
+                          Review <ChevronRight size={14} />
+                        </Link>
+                      </div>
                     </td>
                   </tr>
+                  {expandedAttemptId === row.id && (
+                    <tr
+                      className="attempt-questions-row"
+                      data-testid={`questions-row-${row.id}`}
+                    >
+                      <td colSpan={9}>
+                        <AttemptQuestions attemptId={row.id} />
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
