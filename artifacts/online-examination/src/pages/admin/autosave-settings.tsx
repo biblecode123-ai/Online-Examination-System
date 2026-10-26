@@ -54,7 +54,7 @@ export function AutosaveSettingsPage() {
   if (isLoading) {
     return (
       <div className="page">
-        <LoadingBlock message="Loading autosave settings..." />
+        <LoadingBlock label="Loading autosave settings..." />
       </div>
     );
   }

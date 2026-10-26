@@ -17,21 +17,36 @@ export function AdminUsers() {
 
   const { data: users, isLoading } = useQuery({
     queryKey: ['admin-users', page, roleFilter, statusFilter, departmentFilter, search],
-    queryFn: () => adminApi.listUsers({
-      page,
-      perPage: 20,
-      search: search.trim() || undefined,
-      role: roleFilter || undefined,
-      department_id: departmentFilter ?? undefined,
-      active: statusFilter === 'active' ? true : statusFilter === 'inactive' ? false : undefined,
-    }),
+    queryFn: async () => {
+      const params = {
+        page,
+        perPage: 20,
+        search: search.trim() || undefined,
+        role: roleFilter || undefined,
+        department_id: departmentFilter ?? undefined,
+        active: statusFilter === 'active' ? true : statusFilter === 'inactive' ? false : undefined,
+      };
+      console.log('Fetching users with params:', params);
+      return adminApi.listUsers(params);
+    },
   });
 
-  const { data: departments = [] } = useQuery({
+  const { data: departmentsData, isLoading: departmentsLoading, error: departmentsError } = useQuery({
     queryKey: ['admin-departments'],
-    queryFn: () => adminExamApi.departments(),
+    queryFn: async () => {
+      try {
+        const response = await adminApi.listDepartments({ per_page: 100 });
+        console.log('Departments loaded:', response);
+        return response;
+      } catch (err) {
+        console.error('Failed to load departments:', err);
+        throw err;
+      }
+    },
     staleTime: 5 * 60_000,
   });
+
+  const departments = departmentsData?.items ?? [];
 
   const deleteUserMutation = useMutation({
     mutationFn: adminApi.deleteUser,
@@ -178,13 +193,23 @@ export function AdminUsers() {
                   value={departmentFilter ?? ''}
                   onChange={(e) => setDepartmentFilter(e.target.value ? Number(e.target.value) : null)}
                   className="filter-select"
+                  disabled={departmentsLoading || departmentsError != null}
+                  title={departmentsError ? 'Failed to load departments' : undefined}
                 >
                   <option value="">All Departments</option>
-                  {departments.map((department) => (
-                    <option key={department.id} value={department.id}>
-                      {department.name}
-                    </option>
-                  ))}
+                  {departmentsError ? (
+                    <option disabled>Error loading departments</option>
+                  ) : departmentsLoading ? (
+                    <option disabled>Loading departments...</option>
+                  ) : departments.length === 0 ? (
+                    <option disabled>No departments available</option>
+                  ) : (
+                    departments.map((department) => (
+                      <option key={department.id} value={department.id}>
+                        {department.name}
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
             </div>

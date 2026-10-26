@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'wouter';
 import { BarChart3, CheckCircle2, Clock } from 'lucide-react';
-import { adminExamApi } from '../../../lib/endpoints';
+import { adminApi, adminExamApi } from '../../../lib/endpoints';
 import { EmptyState, ErrorBox, LoadingBlock, Status } from '../../../components/shell';
 import { fmtDate, fmtMinutes } from './logic';
-import type { AdminRealExam } from '../../../lib/types';
+import type { AdminRealExam, AdminResultRow } from '../../../lib/types';
 
 type AttemptFilter = '' | 'ongoing' | 'completed';
 
@@ -29,6 +29,22 @@ export function ResultsTab({ exam }: { exam: AdminRealExam }) {
       adminExamApi.listAttempts(exam.id, { filter: filter || undefined, page }, signal),
     placeholderData: (previous) => previous,
   });
+
+  // Marks (earned / possible) are authoritative on the results endpoint, not on
+  // the attempts endpoint — one exam-scoped request enriches every row below.
+  // Ongoing attempts are absent until graded, so rows fall back to attempt data.
+  const marksQuery = useQuery({
+    queryKey: ['admin-exam-marks', exam.id],
+    queryFn: ({ signal }) => adminApi.results({ exam_id: exam.id, per_page: 200 }, signal),
+    staleTime: 30_000,
+    retry: 1,
+  });
+
+  const marksById = useMemo(() => {
+    const map = new Map<number, AdminResultRow>();
+    for (const row of marksQuery.data?.results ?? []) map.set(row.id, row);
+    return map;
+  }, [marksQuery.data]);
 
   const rows = attemptsQuery.data?.items ?? [];
   const lastPage = Math.max(1, attemptsQuery.data?.lastPage ?? 1);
@@ -71,6 +87,13 @@ export function ResultsTab({ exam }: { exam: AdminRealExam }) {
           onRetry={() => void attemptsQuery.refetch()}
           testId="attempts-error"
         />
+        {marksQuery.isError && (
+          <ErrorBox
+            error={marksQuery.error}
+            onRetry={() => void marksQuery.refetch()}
+            testId="marks-error"
+          />
+        )}
         {attemptsQuery.isLoading ? (
           <LoadingBlock label="Loading attempts…" />
         ) : rows.length === 0 ? (
@@ -88,6 +111,7 @@ export function ResultsTab({ exam }: { exam: AdminRealExam }) {
                     <th>Attempt</th>
                     <th>Student</th>
                     <th>Status</th>
+                    <th className="num">Marks</th>
                     <th className="num">Score</th>
                     <th className="num">Correct</th>
                     <th>Started</th>
@@ -99,9 +123,22 @@ export function ResultsTab({ exam }: { exam: AdminRealExam }) {
                   {rows.map((attempt, index) => {
                     const status = (attempt.status ?? '').toLowerCase();
                     const ongoing = status === 'ongoing' || status === 'in_progress' || status === 'active';
+                    const marks = marksById.get(attempt.id);
+                    // The attempts endpoint returns `score` as the percentage
+                    // (verified: 66.67 for 2/3 marks) but no `percentage` field,
+                    // so fall back to it and always label it as a percentage.
+                    const percentage =
+                      marks?.percentage ??
+                      (attempt.score != null && attempt.score !== ('' as never)
+                        ? Number(attempt.score)
+                        : null);
+                    const earned = marks?.marks_obtained ?? null;
+                    const possible = marks?.max_marks ?? null;
+                    const correct = marks?.correct_answers ?? attempt.correct_answers;
+                    const totalQ = marks?.total_questions ?? attempt.total_questions;
                     return (
                       <tr key={attempt.id} data-testid={`row-attempt-${attempt.id}`}>
-                        <td className="num">#{page > 1 ? (page - 1) * 10 + index + 1 : index + 1}</td>
+                        <td className="num">#{attempt.id}</td>
                         <td>
                           {attempt.student?.name ?? `Student #${attempt.student_id ?? '?'}`}
                           {attempt.student?.email && (
@@ -113,20 +150,36 @@ export function ResultsTab({ exam }: { exam: AdminRealExam }) {
                             {attempt.status ?? '—'}
                           </Status>
                         </td>
-                        <td className="num">
-                          {attempt.score != null
-                            ? `${attempt.score}${attempt.percentage != null ? ` (${attempt.percentage}%)` : ''}`
-                            : '—'}
+                        <td className="num" data-testid={`row-marks-${attempt.id}`}>
+                          <strong>{possible != null ? possible : '—'}</strong>
                         </td>
                         <td className="num">
-                          {attempt.correct_answers != null && attempt.total_questions != null
-                            ? `${attempt.correct_answers}/${attempt.total_questions}`
-                            : '—'}
+                          <strong>
+                            {earned != null && possible != null
+                              ? `${earned} / ${possible}`
+                              : '—'}
+                          </strong>
                         </td>
-                        <td>{fmtDate(attempt.started_at)}</td>
-                        <td>{fmtDate(attempt.submitted_at ?? attempt.completed_at)}</td>
+                        <td className="num">
+                          <strong>
+                            {correct != null && totalQ != null ? `${correct} / ${totalQ}` : '—'}
+                          </strong>
+                        </td>
+                        <td>{fmtDate(attempt.started_at ?? marks?.start_time)}</td>
                         <td>
-                          {attempt.is_graded === true ? (
+                          {fmtDate(
+                            attempt.submitted_at ??
+                              attempt.completed_at ??
+                              marks?.completed_at ??
+                              marks?.end_time,
+                          )}
+                        </td>
+                        <td>
+                          {marks?.grading_status ? (
+                            <Status tone={marks.grading_status === 'pending_review' ? 'amber' : 'green'}>
+                              {marks.grading_status.replace(/_/g, ' ')}
+                            </Status>
+                          ) : attempt.is_graded === true ? (
                             <Status tone="green">Graded</Status>
                           ) : attempt.is_graded === false ? (
                             <Status tone="amber">Pending</Status>
@@ -169,9 +222,10 @@ export function ResultsTab({ exam }: { exam: AdminRealExam }) {
         )}
 
         <small className="field-hint form-footnote">
-          Duration {fmtMinutes(exam.total_time)} · passing {exam.passing_percentage ?? '—'}% ·
-          grading and detailed breakdowns are server-computed in{' '}
-          <Link href="/admin/results">Results</Link>.
+          Marks: total possible points (sum of all question points) · Score: earned marks / total marks ·
+          Correct: correct answers / total questions · Duration {fmtMinutes(exam.total_time)} · passing{' '}
+          {exam.passing_percentage ?? '—'}% · grading and detailed breakdowns are server-computed
+          in <Link href="/admin/results">Results</Link>.
           {exam.ongoing_attempts ? (
             <>
               {' '}

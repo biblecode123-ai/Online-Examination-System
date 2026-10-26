@@ -1344,13 +1344,40 @@ export const adminExamApi = {
     return unwrap(envelope, 'Could not save the exam instructions.');
   },
 
-  /** GET /v1/departments — reference list for the filters and pickers. */
+  /** GET /v1/departments — reference list for the filters and pickers. Fetches every page. */
   async departments(signal?: AbortSignal): Promise<{ id: number; name: string }[]> {
-    const envelope = await apiRequest<Envelope<{ id: number; name: string }[]>>('/v1/departments', {
-      query: { per_page: 100 },
-      signal,
-    });
-    return unwrap(envelope, 'Could not load the departments.');
+    const items: { id: number; name: string }[] = [];
+    let lastPage = 1;
+    for (let page = 1; page <= 10; page += 1) {
+      const response = await apiRequest<unknown>('/v1/departments', {
+        query: { page, per_page: 100 },
+        signal,
+      });
+
+      let pageItems: { id: number; name: string }[] = [];
+      let paginatorLastPage = 1;
+
+      if (Array.isArray(response)) {
+        pageItems = response as { id: number; name: string }[];
+      } else if (response && typeof response === 'object') {
+        const obj = response as Record<string, unknown>;
+        // Envelope shape: { success, data: [...] }
+        if (Array.isArray(obj.data)) {
+          pageItems = obj.data as { id: number; name: string }[];
+        }
+        // Paginator shape: { data: [...], last_page, ... } or { success, data: { data: [...], last_page } }
+        else if (obj.data && typeof obj.data === 'object' && !Array.isArray(obj.data) && 'data' in obj.data && Array.isArray((obj.data as Record<string, unknown>).data)) {
+          const paginator = obj.data as Record<string, unknown>;
+          pageItems = (paginator.data as { id: number; name: string }[]) ?? [];
+          paginatorLastPage = Number(paginator.last_page ?? 1);
+        }
+      }
+
+      items.push(...pageItems);
+      lastPage = paginatorLastPage;
+      if (page >= lastPage || pageItems.length === 0) break;
+    }
+    return items;
   },
 
   /** GET /v1/exam-categories — the Real Exam category is fetched, never hardcoded. */

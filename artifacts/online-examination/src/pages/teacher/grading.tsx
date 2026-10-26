@@ -418,7 +418,14 @@ export function TeacherGrading() {
                             {attempt.student?.name ?? 'Unknown'}
                           </span>
                           <span>
-                            <strong>Score:</strong> {attempt.score ?? '—'}%
+                            <strong>Score:</strong>{' '}
+                            {attempt.score != null ? `${attempt.score}%` : '—'}
+                          </span>
+                          <span>
+                            <strong>Correct:</strong>{' '}
+                            {attempt.correct_answers != null && attempt.total_questions != null
+                              ? `${attempt.correct_answers} / ${attempt.total_questions}`
+                              : '—'}
                           </span>
                           {attempt.submitted_at && (
                             <span>

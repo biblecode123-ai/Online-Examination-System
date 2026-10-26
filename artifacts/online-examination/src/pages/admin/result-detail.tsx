@@ -153,15 +153,26 @@ export function AdminResultDetail() {
               <div className="eyebrow">ATTEMPT RECORD</div>
               <div className="result-meta-grid">
                 <div className="metric">
-                  <small>MARKS OBTAINED</small>
+                  <small>TOTAL MARKS</small>
                   <strong data-testid="result-marks">
-                    {result.marks_obtained}
-                    {result.max_marks !== null ? ` / ${result.max_marks}` : ''}
+                    {result.max_marks !== null ? result.max_marks : '—'}
+                  </strong>
+                </div>
+                <div className="metric">
+                  <small>EARNED MARKS</small>
+                  <strong data-testid="result-marks-earned">
+                    {result.marks_obtained != null && result.max_marks != null
+                      ? `${result.marks_obtained} / ${result.max_marks}`
+                      : '—'}
                   </strong>
                 </div>
                 <div className="metric">
                   <small>CORRECT</small>
-                  <strong>{result.correct_answers ?? '—'}</strong>
+                  <strong>
+                    {result.correct_answers != null && result.total_questions != null
+                      ? `${result.correct_answers} / ${result.total_questions}`
+                      : '—'}
+                  </strong>
                 </div>
                 <div className="metric">
                   <small>INCORRECT</small>

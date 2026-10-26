@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { adminApi } from '../../lib/endpoints';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { adminApi, adminExamApi } from '../../lib/endpoints';
 import { X, UserPlus, Loader2 } from 'lucide-react';
 
 interface CreateUserModalProps {
@@ -18,6 +18,12 @@ export function CreateUserModal({ isOpen, onClose }: CreateUserModalProps) {
     telegram_username: '',
   });
   const queryClient = useQueryClient();
+
+  const { data: departments = [] } = useQuery({
+    queryKey: ['admin-departments'],
+    queryFn: () => adminExamApi.departments(),
+    staleTime: 5 * 60_000,
+  });
 
   const createUserMutation = useMutation({
     mutationFn: adminApi.createUser,
@@ -111,13 +117,18 @@ export function CreateUserModal({ isOpen, onClose }: CreateUserModalProps) {
             </div>
 
             <div className="form-group">
-              <label>Department ID</label>
-              <input
-                type="number"
+              <label>Department</label>
+              <select
                 value={formData.department_id}
                 onChange={(e) => setFormData({ ...formData, department_id: e.target.value })}
-                placeholder="Optional"
-              />
+              >
+                <option value="">None</option>
+                {departments.map((department) => (
+                  <option key={department.id} value={department.id}>
+                    {department.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="form-group">

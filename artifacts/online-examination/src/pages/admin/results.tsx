@@ -985,7 +985,9 @@ export function AdminResults() {
                     onSort={toggleSort}
                   />
                   <th>Status</th>
-                  <SortableHeader label="Score" column="score" filters={filters} onSort={toggleSort} />
+                  <SortableHeader label="Marks" column="score" filters={filters} onSort={toggleSort} />
+                  <th>Score</th>
+                  <th>Correct</th>
                   <th>Outcome</th>
                   <th>Grading</th>
                   <SortableHeader
@@ -1040,33 +1042,22 @@ export function AdminResults() {
                         {row.attempt_state ? ` · ${row.attempt_state}` : ''}
                       </small>
                     </td>
-                    <td>
-                      <div className="result-score-cell">
-                        <strong data-testid={`score-${row.id}`}>
-                          {row.percentage !== null ? `${row.percentage}%` : '—'}
-                        </strong>
-                        <small>
-                          {row.marks_obtained}
-                          {row.max_marks !== null ? ` / ${row.max_marks}` : ''} marks
-                        </small>
-                        {row.percentage !== null && (
-                          <span
-                            className={`result-score-bar ${
-                              row.outcome === 'passed'
-                                ? 'pass'
-                                : row.outcome === 'failed'
-                                  ? 'fail'
-                                  : ''
-                            }`}
-                          >
-                            <i
-                              style={{
-                                width: `${Math.min(100, Math.max(0, row.percentage))}%`,
-                              }}
-                            />
-                          </span>
-                        )}
-                      </div>
+                    <td className="num" data-testid={`marks-${row.id}`}>
+                      <strong>{row.max_marks !== null ? row.max_marks : '—'}</strong>
+                    </td>
+                    <td className="num" data-testid={`score-${row.id}`}>
+                      <strong>
+                        {row.marks_obtained != null && row.max_marks != null
+                          ? `${row.marks_obtained} / ${row.max_marks}`
+                          : '—'}
+                      </strong>
+                    </td>
+                    <td className="num" data-testid={`correct-${row.id}`}>
+                      <strong>
+                        {row.correct_answers != null && row.total_questions != null
+                          ? `${row.correct_answers} / ${row.total_questions}`
+                          : '—'}
+                      </strong>
                     </td>
                     <td>
                       <Status tone={outcomeTone(row)} testId={`outcome-${row.id}`}>
@@ -1108,7 +1099,7 @@ export function AdminResults() {
                       className="attempt-questions-row"
                       data-testid={`questions-row-${row.id}`}
                     >
-                      <td colSpan={9}>
+                      <td colSpan={11}>
                         <AttemptQuestions attemptId={row.id} />
                       </td>
                     </tr>
