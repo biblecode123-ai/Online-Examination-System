@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import { adminExamApi, type AdminQuestionInput } from '../../../lib/endpoints';
+import { resolveQuestionImage } from '../../../lib/api';
 import { ConfirmDialog, ErrorBox, LoadingBlock, NoticeBanner, Status } from '../../../components/shell';
 import {
   DIFFICULTY_OPTIONS,
@@ -206,11 +207,36 @@ const EMPTY_FORM: QuestionFormState = {
   ],
 };
 
+/**
+ * Question-level instruction text for the edit form.
+ *
+ * The list endpoint returns `instructions` (the question's own rows), while the
+ * single-question GET returns `merged_instructions` (question + passage + section
+ * rows). Only the question's own rows are shown here so editing a question never
+ * rewrites the passage's instructions.
+ */
+function questionInstructionText(q: AdminQuestionRow): string {
+  const source: unknown[] = Array.isArray(q.instructions)
+    ? q.instructions
+    : Array.isArray(q.merged_instructions)
+      ? q.merged_instructions
+      : [];
+  const isOwn = (row: unknown) => {
+    const ctx = String((row as { context_type?: unknown } | null)?.context_type ?? '');
+    const type = String((row as { type?: unknown } | null)?.type ?? '');
+    return ctx.endsWith('Question') || type === 'question';
+  };
+  const text = source
+    .filter(isOwn)
+    .map((row) => String((row as { content?: unknown }).content ?? '').trim())
+    .filter(Boolean)
+    .join('\n');
+  if (text) return text;
+  return typeof q.merged_instructions === 'string' ? q.merged_instructions : '';
+}
+
 function formFromQuestion(q: AdminQuestionRow): QuestionFormState {
-  const instructions =
-    q.merged_instructions ??
-    (q.instructions && q.instructions.length > 0 ? q.instructions[0].content : '') ??
-    '';
+  const instructions = questionInstructionText(q);
 
   let matchingPairs: MatchingPairDraft[] = [];
   if (q.matching_pairs && q.matching_pairs.length > 0) {
@@ -255,10 +281,16 @@ function formFromQuestion(q: AdminQuestionRow): QuestionFormState {
   };
 }
 
-/** Translate the form state into the backend's verified store/update payload. */
+/** Translate the form state into the backend's verified store/update payload.
+ *
+ * `examId` is only passed on create: the backend throws a 500 when exam_id is
+ * echoed back on update (verified against the live API), and the dialog never
+ * moves a question between exams anyway. On update an empty passage must be
+ * sent as an explicit `null` — omitting the field keeps the old passage.
+ */
 function toPayload(
   form: QuestionFormState,
-  examId: number,
+  examId: number | null,
 ): { payload: AdminQuestionInput; error?: string } {
   const text = form.question_text.trim();
   if (form.question_type !== 'matching' && !text)
@@ -268,14 +300,17 @@ function toPayload(
     return { payload: {} as AdminQuestionInput, error: 'Maximum points must be an integer greater than zero.' };
 
   const base: AdminQuestionInput = {
-    exam_id: examId,
     question_type: form.question_type,
     question_text: text,
     points,
   };
-  if (form.instructions.trim()) base.instructions = form.instructions.trim();
+  if (examId !== null) base.exam_id = examId;
+  // `instructions` is deliberately NOT part of this payload: the backend
+  // ignores it silently (verified live). Instructions are synced through
+  // /v1/instructions after the question saves — see syncQuestionInstructions.
   if (form.question_image.trim()) base.question_image = form.question_image.trim();
   if (form.passage_id) base.passage_id = Number(form.passage_id);
+  else if (examId === null) base.passage_id = null;
 
   if (form.question_type === 'multiple_choice') {
     const options = form.options.filter((o) => o.text.trim());
@@ -325,6 +360,35 @@ function toPayload(
   return { payload: base };
 }
 
+/**
+ * Keep the question's instruction row in step with the dialog's instructions box.
+ *
+ * The backend ignores `instructions` on POST/PUT /v1/questions, so the text is
+ * written to the polymorphic /v1/instructions resource instead: create when the
+ * box gains text, PUT when it changes, DELETE when it is cleared. The previous
+ * row is read off the edited list row (`instructions`).
+ */
+async function syncQuestionInstructions(
+  questionId: number | null,
+  value: string,
+  editing: AdminQuestionRow | null,
+): Promise<void> {
+  const content = value.trim();
+  const existing = (editing?.instructions ?? []).find((row) => {
+    const context = String(row.context_type ?? '');
+    return !context || context.endsWith('Question');
+  });
+
+  if (!content) {
+    if (existing) await adminExamApi.deleteQuestionInstruction(existing.id);
+    return;
+  }
+  if (!questionId) return;
+  if (!existing) await adminExamApi.createQuestionInstruction(questionId, content);
+  else if (existing.content !== content)
+    await adminExamApi.updateQuestionInstruction(existing.id, content);
+}
+
 function QuestionDialog({
   exam,
   editing,
@@ -354,12 +418,14 @@ function QuestionDialog({
   };
 
   const saveMutation = useMutation({
-    mutationFn: () => {
-      const { payload, error } = toPayload(form, exam.id);
-      if (error) return Promise.reject(new Error(error));
-      return editing
-        ? adminExamApi.updateQuestion(editing.id, payload)
-        : adminExamApi.createQuestion(payload);
+    mutationFn: async () => {
+      const { payload, error } = toPayload(form, editing ? null : exam.id);
+      if (error) throw new Error(error);
+      const saved = editing
+        ? await adminExamApi.updateQuestion(editing.id, payload)
+        : await adminExamApi.createQuestion(payload);
+      await syncQuestionInstructions(saved.id ?? editing?.id ?? null, form.instructions, editing);
+      return saved;
     },
     onSuccess: () => {
       invalidate();
@@ -452,6 +518,8 @@ function QuestionDialog({
   }, [passages, passageSearch]);
 
   const attachedPassage = passages.find((passage) => String(passage.id) === form.passage_id);
+  // Existing questions return a storage-relative path; freshly picked files are data URLs.
+  const imagePreviewSrc = resolveQuestionImage(form.question_image);
 
   const serverErrors =
     saveMutation.error instanceof Error && 'errors' in saveMutation.error
@@ -749,8 +817,8 @@ function QuestionDialog({
                 }}
                 data-testid="input-question-image"
               />
-              {form.question_image && (
-                <img src={form.question_image} alt="preview" style={{ maxWidth: 240, marginTop: 8, borderRadius: 8 }} />
+              {imagePreviewSrc && (
+                <img src={imagePreviewSrc} alt="preview" style={{ maxWidth: 240, marginTop: 8, borderRadius: 8 }} />
               )}
             </div>
             )}

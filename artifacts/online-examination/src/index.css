@@ -4954,6 +4954,20 @@ table.table {
   white-space: pre-wrap;
 }
 
+.preview-instructions {
+  background: var(--surface-muted, #f8fafc);
+  border-left: 3px solid var(--brand-primary);
+  border-radius: var(--radius-sm);
+  padding: 9px 13px;
+  margin-bottom: 10px;
+  max-width: none;
+  white-space: pre-wrap;
+}
+
+.preview-instructions strong {
+  color: var(--brand-primary-active);
+}
+
 .q-text {
   font-size: 15px;
   line-height: 1.6;

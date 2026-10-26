@@ -648,6 +648,19 @@ export interface AdminQuestionOptionFull {
   is_correct: boolean;
 }
 
+/** One row of the polymorphic `instructions` table (Instruction model). */
+export interface AdminInstructionRow {
+  id: number;
+  content: string;
+  /** `question` | `passage` | `exam` | `section` | `global` … */
+  type?: string | null;
+  /** Fully-qualified model (e.g. `App\Models\Question`) or a plain slug. */
+  context_type?: string | null;
+  context_id?: number | null;
+  order_index?: number | null;
+  is_active?: boolean | null;
+}
+
 /** One question of GET /v1/questions?exam_id=X (QuestionResource). */
 export interface AdminQuestionRow {
   id: number;
@@ -666,8 +679,11 @@ export interface AdminQuestionRow {
   options?: AdminQuestionOptionFull[];
   passage?: { id: number; title?: string | null; content?: string | null } | null;
   matching_pairs?: { id?: number; left_item: string; right_item: string }[];
-  instructions?: { id?: number; content?: string }[];
-  merged_instructions?: string | null;
+  /** Question-level instructions only — present on the LIST endpoint. */
+  instructions?: AdminInstructionRow[];
+  /** Question + passage + section instructions, ordered — present on the
+   *  single-question GET. May be a plain string on older payloads. */
+  merged_instructions?: AdminInstructionRow[] | string | null;
 }
 
 /** Custom pagination block of the questions list (meta.pagination). */

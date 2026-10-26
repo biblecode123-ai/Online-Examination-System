@@ -2,11 +2,37 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Eye, EyeOff, FileText, Timer } from 'lucide-react';
 import { adminExamApi } from '../../../lib/endpoints';
+import { resolveQuestionImage } from '../../../lib/api';
 import { EmptyState, ErrorBox, LoadingBlock, PageTitle, Status } from '../../../components/shell';
 import { QUESTION_TYPE_LABEL, fmtMinutes, questionTotalMarks } from './logic';
-import type { AdminRealExam } from '../../../lib/types';
+import type { AdminQuestionRow, AdminRealExam } from '../../../lib/types';
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+
+/**
+ * Instruction text may arrive as a plain string, an array of polymorphic
+ * instruction rows (passage/section/group inheritance), or not at all —
+ * normalize all shapes to displayable text.
+ */
+function instructionText(question: AdminQuestionRow): string {
+  const rows: string[] = [];
+  const push = (value: unknown) => {
+    if (Array.isArray(value)) {
+      value.forEach(push);
+      return;
+    }
+    const text =
+      typeof value === 'string'
+        ? value
+        : value && typeof value === 'object' && 'content' in value
+          ? String((value as { content?: unknown }).content ?? '')
+          : '';
+    if (text.trim()) rows.push(text.trim());
+  };
+  push(question.merged_instructions);
+  if (Array.isArray(question.instructions)) question.instructions.forEach((row) => push(row));
+  return [...new Set(rows)].join('\n');
+}
 
 /**
  * Admin preview — renders the exact questions/options students will receive
@@ -96,6 +122,8 @@ export function PreviewTab({ exam }: { exam: AdminRealExam }) {
       <div className="preview-questions">
         {questions.map((question, index) => {
           const typeLabel = QUESTION_TYPE_LABEL[question.question_type] ?? question.question_type;
+          const instructions = instructionText(question);
+          const imageSrc = resolveQuestionImage(question.question_image);
           return (
             <article className="preview-question" key={question.id} data-testid={`preview-question-${question.id}`}>
               <header>
@@ -108,16 +136,25 @@ export function PreviewTab({ exam }: { exam: AdminRealExam }) {
                 <small className="text-muted">Q#{question.id}</small>
               </header>
 
+              {instructions && (
+                <div
+                  className="question-instructions-banner preview-instructions"
+                  data-testid={`preview-instructions-${question.id}`}
+                >
+                  <strong>Instructions:</strong> {instructions}
+                </div>
+              )}
+
               {question.passage && (
-                <div className="preview-passage">
+                <div className="preview-passage" data-testid={`preview-passage-${question.id}`}>
                   <strong>{question.passage.title || 'Reading passage'}</strong>
                   <p>{question.passage.content}</p>
                 </div>
               )}
 
               <p className="q-text">{question.question_text}</p>
-              {question.question_image && (
-                <img src={question.question_image} alt="" className="q-image" loading="lazy" />
+              {imageSrc && (
+                <img src={imageSrc} alt="" className="q-image" loading="lazy" />
               )}
 
               {question.question_type === 'matching' ? (

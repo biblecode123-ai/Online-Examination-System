@@ -9,6 +9,7 @@ import { ApiError, apiRequest, apiBlob, API_ROOT, API_ROOT_DIRECT } from './api'
 import type {
   AdminDepartmentRow,
   AdminExamSummary,
+  AdminInstructionRow,
   AdminQuestionRow,
   AdminRealExam,
   AdminRealExamSettings,
@@ -55,6 +56,21 @@ function unwrap<T>(envelope: Envelope<T> | null | undefined, fallback: string): 
     throw new ApiError(envelope.message || fallback, 502, 'parse');
   }
   return envelope.data;
+}
+
+/**
+ * /v1/instructions responds with a BARE Instruction object (verified live:
+ * `{id, content, type, context_type, context_id, …}`), not the `{data: …}`
+ * envelope the question endpoints use — unwrap() would throw a false
+ * "could not save" error on a save that actually succeeded. Accept both shapes.
+ */
+function unwrapInstruction(body: unknown, fallback: string): AdminInstructionRow {
+  const root = (body ?? {}) as Record<string, unknown>;
+  const row = (root.data !== undefined && root.data !== null ? root.data : root) as Record<string, unknown>;
+  if (typeof row !== 'object' || row === null || row.id === undefined) {
+    throw new ApiError(fallback, 502, 'parse');
+  }
+  return row as unknown as AdminInstructionRow;
 }
 
 /** Drop the empty filter values so the backend receives a clean query string. */
@@ -963,7 +979,8 @@ export interface AdminQuestionInput {
   explanation?: string;
   question_image?: string;
   answer?: string;
-  passage_id?: number;
+  /** `null` explicitly detaches the passage on update (omitting it keeps the old one). */
+  passage_id?: number | null;
   /** Backend requires BOTH question_option and option_text with the same text. */
   options?: {
     question_option: string;
@@ -1200,6 +1217,39 @@ export const adminExamApi = {
       body: data,
     });
     return unwrap(envelope, 'Could not update the question.');
+  },
+
+  /**
+   * POST /v1/instructions — question-level instructions live in the polymorphic
+   * `instructions` table, NOT on the question body: the backend silently ignores
+   * an `instructions` field on POST/PUT /v1/questions (verified live, 200 with no
+   * effect). `context_type` must be the fully-qualified Question model.
+   */
+  async createQuestionInstruction(questionId: number, content: string): Promise<AdminInstructionRow> {
+    const body = await apiRequest<unknown>('/v1/instructions', {
+      method: 'POST',
+      body: {
+        content,
+        type: 'question',
+        context_type: 'App\\Models\\Question',
+        context_id: questionId,
+      },
+    });
+    return unwrapInstruction(body, 'Could not save the question instructions.');
+  },
+
+  /** PUT /v1/instructions/{id} — replaces the content of one instruction row. */
+  async updateQuestionInstruction(instructionId: number, content: string): Promise<AdminInstructionRow> {
+    const body = await apiRequest<unknown>(`/v1/instructions/${instructionId}`, {
+      method: 'PUT',
+      body: { content },
+    });
+    return unwrapInstruction(body, 'Could not update the question instructions.');
+  },
+
+  /** DELETE /v1/instructions/{id} — used when the instructions field is cleared. */
+  async deleteQuestionInstruction(instructionId: number): Promise<void> {
+    await apiRequest<unknown>(`/v1/instructions/${instructionId}`, { method: 'DELETE' });
   },
 
   /** DELETE /v1/questions/{id} — blocked server-side once attempts exist. */

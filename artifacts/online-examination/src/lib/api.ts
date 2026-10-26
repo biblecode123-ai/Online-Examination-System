@@ -31,6 +31,23 @@ export const API_ROOT = import.meta.env.PROD
 /** Direct API root for endpoints that bypass the proxy (e.g., staff-login) */
 export const API_ROOT_DIRECT = `${API_BASE_URL}/api`;
 
+/**
+ * Resolve a QuestionResource `question_image` value into an <img src>.
+ *
+ * The backend returns either an absolute/data URL or a public-disk relative
+ * path such as "questions/abc123.jpeg". A bare relative path would resolve
+ * against the page origin (the SPA dev server / Vercel rewrite) and 404, so
+ * storage paths are rebased onto the API origin's /storage route.
+ */
+export function resolveQuestionImage(src?: string | null): string | null {
+  const value = src?.trim();
+  if (!value) return null;
+  if (/^(https?:|data:)/i.test(value)) return value;
+  if (value.startsWith('/')) return `${API_BASE_URL}${value}`;
+  if (value.startsWith('storage/')) return `${API_BASE_URL}/${value}`;
+  return `${API_BASE_URL}/storage/${value}`;
+}
+
 const TOKEN_STORAGE_KEY = 'ofijan.student.token.v1';
 
 export type ApiErrorKind = 'http' | 'network' | 'timeout' | 'parse';
