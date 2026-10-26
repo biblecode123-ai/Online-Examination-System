@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Eye, EyeOff, FileText, Timer } from 'lucide-react';
 import { adminExamApi } from '../../../lib/endpoints';
 import { resolveQuestionImage } from '../../../lib/api';
+import { renderRichText } from '../../../lib/richText';
 import { EmptyState, ErrorBox, LoadingBlock, PageTitle, Status } from '../../../components/shell';
 import { QUESTION_TYPE_LABEL, fmtMinutes, questionTotalMarks } from './logic';
 import type { AdminQuestionRow, AdminRealExam } from '../../../lib/types';
@@ -148,7 +149,13 @@ export function PreviewTab({ exam }: { exam: AdminRealExam }) {
               {question.passage && (
                 <div className="preview-passage" data-testid={`preview-passage-${question.id}`}>
                   <strong>{question.passage.title || 'Reading passage'}</strong>
-                  <p>{question.passage.content}</p>
+                  {/* Passages support markdown-lite (headings, tables, lists,
+                      images) — rendered as sanitised HTML, exactly as students
+                      see it during an attempt. */}
+                  <div
+                    className="passage-body passage-rich"
+                    dangerouslySetInnerHTML={{ __html: renderRichText(question.passage.content) }}
+                  />
                 </div>
               )}
 

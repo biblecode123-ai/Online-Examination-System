@@ -212,6 +212,33 @@ export const attemptApi = {
   },
 
   /**
+   * POST /student/exams/attempts/{attemptId}/answers/batch
+   * Batch save answers with version tracking (idempotent upsert).
+   */
+  async batchSaveAnswers(
+    attemptId: number,
+    payload: {
+      answers: Array<{
+        question_id: number;
+        selected_option_id?: number | null;
+        answer_text?: string | null;
+        version?: number;
+      }>;
+    },
+  ): Promise<{
+    message: string;
+    saved_count: number;
+    skipped_count: number;
+    saved_answers: Array<{ question_id: number; version: number }>;
+    skipped_question_ids: number[];
+  }> {
+    return apiRequest(
+      `/v1/student/exams/attempts/${attemptId}/answers/batch`,
+      { method: 'POST', body: payload },
+    );
+  },
+
+  /**
    * POST /student/exams/attempts/{attemptId}/submit — final grading happens
    * server-side (ExamSubmissionService); the client never sends marks.
    */
@@ -316,6 +343,32 @@ export const realExamApi = {
     });
   },
 
+  /**
+   * POST /real-exam-attempts/{attempt}/answers/batch
+   * Batch save answers with version tracking (idempotent upsert).
+   */
+  async batchSaveAnswers(
+    attemptId: number,
+    payload: {
+      answers: Array<{
+        question_id: number;
+        option_id?: number | null;
+        answer_text?: string | null;
+        version?: number;
+      }>;
+    },
+  ): Promise<{
+    saved_count: number;
+    skipped_count: number;
+    saved_answers: Array<{ question_id: number; version: number }>;
+    skipped_question_ids: number[];
+  }> {
+    return apiRequest(
+      `/v1/real-exam-attempts/${attemptId}/answers/batch`,
+      { method: 'POST', body: payload },
+    );
+  },
+
   /** POST /real-exam-attempts/{attempt}/heartbeat — resyncs the countdown. */
   async heartbeat(attemptId: number): Promise<HeartbeatData> {
     const envelope = await apiRequest<Envelope<HeartbeatData>>(
@@ -406,6 +459,7 @@ export const adminApi = {
   async listUsers(params?: {
     role?: string;
     active?: boolean;
+    department_id?: number | null;
     telegram_available?: boolean;
     search?: string;
     page?: number;
@@ -1328,6 +1382,32 @@ export const adminExamApi = {
       body: data,
     });
     return unwrap(envelope, 'Could not create the passage.');
+  },
+
+  /**
+   * PUT /v1/passages/{id} — update a passage's title/content (verified via
+   * OPTIONS on the live API: GET,HEAD,PUT,DELETE are allowed). Accepts either
+   * the bare passage object or the `{data}` envelope.
+   */
+  async updatePassage(
+    id: number,
+    data: { title?: string | null; content: string },
+  ): Promise<PassageRow> {
+    const body = await apiRequest<unknown>(`/v1/passages/${id}`, {
+      method: 'PUT',
+      body: data,
+    });
+    const root = (body ?? {}) as Record<string, unknown>;
+    const row = (root.data !== undefined && root.data !== null ? root.data : root) as PassageRow;
+    if (!row || typeof row !== 'object' || row.id === undefined) {
+      throw new ApiError('Could not update the passage.', 502, 'parse');
+    }
+    return row;
+  },
+
+  /** DELETE /v1/passages/{id} — removal is server-verified by the caller list. */
+  async deletePassage(id: number): Promise<void> {
+    await apiRequest<unknown>(`/v1/passages/${id}`, { method: 'DELETE' });
   },
 
   /**

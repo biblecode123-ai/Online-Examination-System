@@ -773,6 +773,51 @@ export interface DepartmentStudent {
   is_active?: boolean;
 }
 
+// ---------------------------------------------------------------------------
+// Autosave Configuration
+// ---------------------------------------------------------------------------
+
+/** Autosave settings from the backend. */
+export interface AutosaveSettings {
+  id?: number;
+  scope: 'global' | 'exam';
+  scope_id?: number | null;
+  time_based_enabled: boolean;
+  time_interval_seconds: number;
+  answer_count_enabled: boolean;
+  answer_count_threshold: number;
+  max_batch_size: number;
+  max_concurrent_requests: number;
+  min_sync_interval_seconds: number;
+  retry_max_attempts: number;
+  retry_initial_delay_ms: number;
+  retry_max_delay_ms: number;
+  active: boolean;
+}
+
+/** Autosave settings API response. */
+export interface AutosaveSettingsResponse {
+  setting: AutosaveSettings;
+  is_default: boolean;
+}
+
+/** Batch save API response (standard attempts). */
+export interface BatchSaveResponse {
+  message: string;
+  saved_count: number;
+  skipped_count: number;
+  saved_answers: Array<{ question_id: number; version: number }>;
+  skipped_question_ids: number[];
+}
+
+/** Batch save API response (real exams). */
+export interface RealExamBatchSaveResponse {
+  saved_count: number;
+  skipped_count: number;
+  saved_answers: Array<{ question_id: number; version: number }>;
+  skipped_question_ids: number[];
+}
+
 /** Reading passage (PassageController). */
 export interface PassageRow {
   id: number;

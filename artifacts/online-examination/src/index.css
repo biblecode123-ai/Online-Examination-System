@@ -6071,3 +6071,203 @@ table.table {
     content: '';
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Rich-text (markdown-lite) passage rendering                          */
+/* ------------------------------------------------------------------ */
+
+/* Generated markup: no pre-wrap (that is for the plain-text fallback). */
+.passage-body.passage-rich {
+  white-space: normal;
+}
+
+.passage-rich h1,
+.passage-rich h2,
+.passage-rich h3,
+.passage-rich h4,
+.passage-rich h5,
+.passage-rich h6 {
+  margin: 0.9em 0 0.35em;
+  line-height: 1.3;
+  color: var(--text-primary);
+}
+
+.passage-rich h1 { font-size: 1.25em; }
+.passage-rich h2 { font-size: 1.15em; }
+.passage-rich h3 { font-size: 1.08em; }
+
+.passage-rich p {
+  margin: 0 0 0.65em;
+}
+
+.passage-rich ul,
+.passage-rich ol {
+  margin: 0 0 0.65em;
+  padding-left: 1.4em;
+}
+
+.passage-rich li {
+  margin: 0.15em 0;
+}
+
+.passage-rich blockquote {
+  margin: 0.7em 0;
+  padding: 6px 12px;
+  border-left: 3px solid var(--brand-primary);
+  background: var(--brand-primary-light);
+  border-radius: var(--radius-sm);
+}
+
+.passage-rich hr {
+  border: none;
+  border-top: 1px dashed var(--border);
+  margin: 0.9em 0;
+}
+
+.passage-rich code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  background: var(--surface-muted);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.passage-rich pre {
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  overflow-x: auto;
+  margin: 0.7em 0;
+}
+
+.passage-rich pre code {
+  background: none;
+  padding: 0;
+}
+
+.passage-rich table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.7em 0;
+  font-size: 0.95em;
+}
+
+.passage-rich th,
+.passage-rich td {
+  border: 1px solid var(--border);
+  padding: 6px 9px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.passage-rich th {
+  background: var(--surface-muted);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.passage-rich img {
+  max-width: 100%;
+  border-radius: var(--radius-sm);
+  margin: 0.4em 0;
+}
+
+.passage-rich a {
+  color: var(--brand-primary-active);
+}
+
+/* ------------------------------------------------------------------ */
+/* Rich-text editor (toolbar + live preview)                           */
+/* ------------------------------------------------------------------ */
+
+.rte {
+  display: grid;
+  gap: 6px;
+}
+
+.rte-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted);
+}
+
+.rte-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 7px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12.5px;
+}
+
+.rte-button:hover {
+  background: var(--brand-primary-light);
+  color: var(--brand-primary-active);
+  border-color: var(--border);
+}
+
+.rte-preview-toggle {
+  margin-left: auto;
+  font-weight: 600;
+}
+
+.rte-preview-toggle.is-active {
+  background: var(--brand-primary-light);
+  color: var(--brand-primary-active);
+  border-color: var(--brand-primary);
+}
+
+.rte-input {
+  width: 100%;
+  resize: vertical;
+  min-height: 96px;
+  font-family: inherit;
+  line-height: 1.55;
+}
+
+.rte-preview {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted);
+  padding: 10px 12px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+/* ------------------------------------------------------------------ */
+/* Passage library rows (edit / delete actions)                        */
+/* ------------------------------------------------------------------ */
+
+.passage-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.passage-list-body {
+  display: grid;
+  gap: 3px;
+  flex: 1;
+}
+
+.passage-list-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.passage-list-item.passage-editing {
+  display: grid;
+}
+
+.passage-list-item.passage-editing input {
+  width: 100%;
+}

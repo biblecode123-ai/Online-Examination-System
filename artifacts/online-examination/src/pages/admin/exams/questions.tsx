@@ -18,6 +18,7 @@ import {
 import { adminExamApi, type AdminQuestionInput } from '../../../lib/endpoints';
 import { resolveQuestionImage } from '../../../lib/api';
 import { ConfirmDialog, ErrorBox, LoadingBlock, NoticeBanner, Status } from '../../../components/shell';
+import { RichTextEditor } from '../../../components/rich-text-editor';
 import {
   DIFFICULTY_OPTIONS,
   QUESTION_TYPE_LABEL,
@@ -769,14 +770,13 @@ function QuestionDialog({
                       }
                       data-testid="input-passage-title"
                     />
-                    <textarea
-                      rows={4}
-                      placeholder="Paste or type the reading passage students will see…"
+                    <RichTextEditor
+                      rows={5}
+                      ariaLabel="Passage content"
+                      testId="textarea-passage-content"
+                      placeholder="Write the reading passage students will see. Tables, headings, lists and images are supported — a question can refer to any of it."
                       value={newPassage.content}
-                      onChange={(e) =>
-                        setNewPassage((prev) => ({ ...prev, content: e.target.value }))
-                      }
-                      data-testid="textarea-passage-content"
+                      onChange={(content) => setNewPassage((prev) => ({ ...prev, content }))}
                     />
                     <div className="passage-new-actions">
                       <small className="field-hint">
@@ -1392,22 +1392,10 @@ export function QuestionsTab({ exam }: { exam: AdminRealExam }) {
           <h3>Reading passages</h3>
           <p className="text-muted">
             Passages are shared reading material; attach them to questions through the question
-            form.
+            form. They support headings, tables, lists and images — edit one below to change it
+            everywhere it is used.
           </p>
-          {passagesQuery.isLoading ? (
-            <LoadingBlock label="Loading passages…" />
-          ) : (passagesQuery.data ?? []).length === 0 ? (
-            <small className="text-muted">No passages yet.</small>
-          ) : (
-            <ul className="passage-list" data-testid="list-passages">
-              {(passagesQuery.data ?? []).map((passage) => (
-                <li key={passage.id}>
-                  <strong>{passage.title || `Passage #${passage.id}`}</strong>
-                  <small>{(passage.content ?? '').slice(0, 140)}…</small>
-                </li>
-              ))}
-            </ul>
-          )}
+          <PassageLibrary />
         </div>
       )}
 
@@ -1570,6 +1558,149 @@ export function QuestionsTab({ exam }: { exam: AdminRealExam }) {
         testId="dialog-delete-question"
       />
     </div>
+  );
+}
+
+/**
+ * Passage library — the shared reading-material manager behind the "Passages"
+ * toggle. Passages are reused by every question in every exam, so they are
+ * edited here once and everywhere updates. PUT/DELETE /v1/passages/{id} are
+ * confirmed allowed on the live API (OPTIONS: GET,HEAD,PUT,DELETE).
+ */
+function PassageLibrary() {
+  const queryClient = useQueryClient();
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [draft, setDraft] = useState<{ title: string; content: string }>({ title: '', content: '' });
+  const [deleting, setDeleting] = useState<{ id: number; label: string } | null>(null);
+
+  const passagesQuery = useQuery({
+    queryKey: ['admin-passages'],
+    queryFn: ({ signal }) => adminExamApi.passages(signal),
+    staleTime: 5 * 60_000,
+    retry: 1,
+  });
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['admin-passages'] });
+
+  const saveMutation = useMutation({
+    mutationFn: (id: number) => adminExamApi.updatePassage(id, { content: draft.content, title: draft.title }),
+    onSuccess: () => {
+      invalidate();
+      setEditingId(null);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => adminExamApi.deletePassage(id),
+    onSuccess: () => {
+      invalidate();
+      setDeleting(null);
+    },
+  });
+
+  if (passagesQuery.isLoading) return <LoadingBlock label="Loading passages…" />;
+
+  const passages = passagesQuery.data ?? [];
+  if (passages.length === 0) return <small className="text-muted">No passages yet.</small>;
+
+  return (
+    <>
+      <ErrorBox error={passagesQuery.error} onRetry={() => void passagesQuery.refetch()} />
+      <ul className="passage-list" data-testid="list-passages">
+        {passages.map((passage) => {
+          const editing = editingId === passage.id;
+          const label = passage.title || `Passage #${passage.id}`;
+          if (!editing) {
+            return (
+              <li key={passage.id} className="passage-list-item">
+                <div className="passage-list-body">
+                  <strong>{label}</strong>
+                  <small>{(passage.content ?? '').slice(0, 140)}…</small>
+                </div>
+                <div className="passage-list-actions">
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label={`Edit passage ${label}`}
+                    data-testid={`button-edit-passage-${passage.id}`}
+                    onClick={() => {
+                      setEditingId(passage.id);
+                      setDraft({ title: passage.title ?? '', content: passage.content ?? '' });
+                    }}
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label={`Delete passage ${label}`}
+                    data-testid={`button-delete-passage-${passage.id}`}
+                    onClick={() => setDeleting({ id: passage.id, label })}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </li>
+            );
+          }
+          return (
+            <li key={passage.id} className="passage-list-item passage-editing">
+              <input
+                type="text"
+                value={draft.title}
+                placeholder="Passage title (optional)"
+                aria-label="Passage title"
+                onChange={(e) => setDraft((prev) => ({ ...prev, title: e.target.value }))}
+                data-testid={`input-passage-title-${passage.id}`}
+              />
+              <RichTextEditor
+                rows={6}
+                ariaLabel="Passage content"
+                testId={`textarea-passage-content-${passage.id}`}
+                value={draft.content}
+                onChange={(content) => setDraft((prev) => ({ ...prev, content }))}
+              />
+              <ErrorBox error={saveMutation.error} testId={`passage-save-error-${passage.id}`} />
+              <div className="passage-new-actions">
+                <button
+                  type="button"
+                  className="button button-quiet button-sm"
+                  onClick={() => setEditingId(null)}
+                  data-testid={`button-cancel-passage-${passage.id}`}
+                >
+                  <X size={14} /> Cancel
+                </button>
+                <button
+                  type="button"
+                  className="button button-primary button-sm"
+                  disabled={saveMutation.isPending || !draft.content.trim()}
+                  onClick={() => saveMutation.mutate(passage.id)}
+                  data-testid={`button-save-passage-${passage.id}`}
+                >
+                  <Save size={14} /> {saveMutation.isPending ? 'Saving…' : 'Save passage'}
+                </button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      <ConfirmDialog
+        open={deleting !== null}
+        title="Delete passage"
+        message={
+          <>
+            <strong>{deleting?.label}</strong> will be removed. Questions that still reference it
+            keep the reference until you attach another passage.
+          </>
+        }
+        confirmLabel="Delete passage"
+        tone="danger"
+        busy={deleteMutation.isPending}
+        onCancel={() => setDeleting(null)}
+        onConfirm={() => deleting && deleteMutation.mutate(deleting.id)}
+        testId="dialog-delete-passage"
+      />
+    </>
   );
 }
 

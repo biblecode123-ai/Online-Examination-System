@@ -1,19 +1,28 @@
 import { useQuery } from '@tanstack/react-query';
-import { adminApi } from '../../lib/endpoints';
-import { BarChart3, Users, Building2, FileText, TrendingUp, Settings, Shield, Plus, ArrowRight, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { adminExamApi } from '../../lib/endpoints';
+import { BarChart3, Building2, Users, FileText, TrendingUp, Settings, Shield, Plus, ArrowRight, Clock, CheckCircle, AlertCircle } from 'lucide-react';
 
 export function AdminDashboard() {
-  const { data: summary, isLoading } = useQuery({
-    queryKey: ['admin-summary'],
-    queryFn: () => adminApi.summary(),
+  const { data: exams, isLoading: examsLoading } = useQuery({
+    queryKey: ['admin-real-exams'],
+    queryFn: ({ signal }) => adminExamApi.listExams(signal),
   });
+
+  const loading = examsLoading;
+
+  const totalExams = typeof exams?.total === 'number' ? exams.total : 0;
+  const totalStudents = exams?.items.reduce((sum, exam) => sum + (exam.assigned_count ?? 0), 0);
+  const totalAttempts = exams?.items.reduce(
+    (sum, exam) => sum + (exam.completed_attempts ?? 0) + (exam.ongoing_attempts ?? 0),
+    0,
+  );
 
   const getCurrentDate = () => {
     const now = new Date();
     return now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   };
 
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="page">
         <div className="loading-block">
@@ -45,55 +54,38 @@ export function AdminDashboard() {
         </div>
 
         <div className="dashboard-stats">
-          <div className="admin-stat-card admin-stat-users">
-            <div className="admin-stat-header">
-              <div className="admin-stat-icon">
-                <Users size={20} />
-              </div>
-              <span className="admin-stat-trend positive">
-                <TrendingUp size={12} />
-                12%
-              </span>
-            </div>
-            <div className="admin-stat-value">
-              {typeof summary?.total_users === 'number' ? summary.total_users.toLocaleString() : '0'}
-            </div>
-            <div className="admin-stat-label">Total Users</div>
-            <div className="admin-stat-meta">Active accounts across all departments</div>
-          </div>
-
-          <div className="admin-stat-card admin-stat-departments">
-            <div className="admin-stat-header">
-              <div className="admin-stat-icon">
-                <Building2 size={20} />
-              </div>
-              <span className="admin-stat-trend neutral">
-                <TrendingUp size={12} />
-                Stable
-              </span>
-            </div>
-            <div className="admin-stat-value">
-              {typeof summary?.total_departments === 'number' ? summary.total_departments : 0}
-            </div>
-            <div className="admin-stat-label">Departments</div>
-            <div className="admin-stat-meta">Academic units in the system</div>
-          </div>
-
           <div className="admin-stat-card admin-stat-exams">
             <div className="admin-stat-header">
               <div className="admin-stat-icon">
                 <FileText size={20} />
               </div>
-              <span className="admin-stat-trend positive">
+              <span className="admin-stat-trend neutral">
                 <TrendingUp size={12} />
-                8%
+                Live
               </span>
             </div>
             <div className="admin-stat-value">
-              {typeof summary?.total_exams === 'number' ? summary.total_exams : 0}
+              {typeof totalExams === 'number' ? totalExams.toLocaleString() : '0'}
             </div>
-            <div className="admin-stat-label">Active Exams</div>
-            <div className="admin-stat-meta">Scheduled and published examinations</div>
+            <div className="admin-stat-label">Real Exams</div>
+            <div className="admin-stat-meta">Teacher-created, administered examinations</div>
+          </div>
+
+          <div className="admin-stat-card admin-stat-students">
+            <div className="admin-stat-header">
+              <div className="admin-stat-icon">
+                <Users size={20} />
+              </div>
+              <span className="admin-stat-trend neutral">
+                <TrendingUp size={12} />
+                Active
+              </span>
+            </div>
+            <div className="admin-stat-value">
+              {typeof totalStudents === 'number' ? totalStudents.toLocaleString() : '0'}
+            </div>
+            <div className="admin-stat-label">Registered Students</div>
+            <div className="admin-stat-meta">Assigned by teachers or administrators</div>
           </div>
 
           <div className="admin-stat-card admin-stat-attempts">
@@ -101,16 +93,16 @@ export function AdminDashboard() {
               <div className="admin-stat-icon">
                 <BarChart3 size={20} />
               </div>
-              <span className="admin-stat-trend positive">
+              <span className="admin-stat-trend neutral">
                 <TrendingUp size={12} />
-                23%
+                Current
               </span>
             </div>
             <div className="admin-stat-value">
-              {typeof summary?.total_attempts === 'number' ? summary.total_attempts.toLocaleString() : '0'}
+              {typeof totalAttempts === 'number' ? totalAttempts.toLocaleString() : '0'}
             </div>
             <div className="admin-stat-label">Exam Attempts</div>
-            <div className="admin-stat-meta">Total submissions this semester</div>
+            <div className="admin-stat-meta">Student attempts on real examinations</div>
           </div>
         </div>
 

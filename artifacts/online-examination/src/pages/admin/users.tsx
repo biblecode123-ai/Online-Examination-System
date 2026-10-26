@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { adminApi } from '../../lib/endpoints';
+import { adminApi, adminExamApi } from '../../lib/endpoints';
 import { UserPlus, Edit, Trash2, Power, PowerOff, Search, Upload, Users, Shield, Filter } from 'lucide-react';
 import { CreateUserModal } from '../../components/admin/CreateUserModal';
 import { BulkImportModal } from '../../components/admin/BulkImportModal';
@@ -9,20 +9,28 @@ export function AdminUsers() {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [departmentFilter, setDepartmentFilter] = useState<number | null>(null);
   const [page, setPage] = useState(1);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showBulkImportModal, setShowBulkImportModal] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: users, isLoading } = useQuery({
-    queryKey: ['admin-users', page, roleFilter, statusFilter, search],
+    queryKey: ['admin-users', page, roleFilter, statusFilter, departmentFilter, search],
     queryFn: () => adminApi.listUsers({
       page,
       perPage: 20,
       search: search.trim() || undefined,
       role: roleFilter || undefined,
+      department_id: departmentFilter ?? undefined,
       active: statusFilter === 'active' ? true : statusFilter === 'inactive' ? false : undefined,
     }),
+  });
+
+  const { data: departments = [] } = useQuery({
+    queryKey: ['admin-departments'],
+    queryFn: () => adminExamApi.departments(),
+    staleTime: 5 * 60_000,
   });
 
   const deleteUserMutation = useMutation({
@@ -162,6 +170,21 @@ export function AdminUsers() {
                   <option value="">All Status</option>
                   <option value="active">Active</option>
                   <option value="inactive">Inactive</option>
+                </select>
+              </div>
+              <div className="filter-select-wrapper">
+                <Filter size={14} className="filter-icon" />
+                <select
+                  value={departmentFilter ?? ''}
+                  onChange={(e) => setDepartmentFilter(e.target.value ? Number(e.target.value) : null)}
+                  className="filter-select"
+                >
+                  <option value="">All Departments</option>
+                  {departments.map((department) => (
+                    <option key={department.id} value={department.id}>
+                      {department.name}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>

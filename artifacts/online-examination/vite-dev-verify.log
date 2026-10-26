@@ -1,0 +1,11 @@
+
+> @workspace/ofijan-examflow@0.0.0 dev
+> vite --config vite.config.ts --host 0.0.0.0
+
+[vite.config] Ignoring invalid PORT value "0"; using 3000 instead.
+
+  [32m[1mVITE[22m v7.3.6[39m  [2mready in [0m[1m921[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m3000[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://192.168.137.1:[1m3000[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://10.215.30.139:[1m3000[22m/[39m

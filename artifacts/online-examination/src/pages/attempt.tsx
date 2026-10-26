@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { Link, useLocation, useParams } from 'wouter';
 import { ErrorBox, LoadingBlock } from '../components/shell';
-import { ApiError, noteServerTime, serverNow } from '../lib/api';
+import { ApiError, noteServerTime, resolveQuestionImage, serverNow } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { formatCountdown } from '../lib/format';
 import { isActiveAttempt } from '../lib/examState';
@@ -30,6 +30,8 @@ import type {
   SectionContent,
 } from '../lib/types';
 import { sanitizeHtml } from '../lib/sanitize';
+import { renderRichText } from '../lib/richText';
+import { answerSync, type SyncStatus } from '../lib/answerSync';
 
 // ─── TYPES ──────────────────────────────────────────────────────────────
 interface SavedAnswer {
@@ -109,6 +111,7 @@ export function ExamAttempt() {
   const [reauthError, setReauthError] = useState('');
   const [reauthBusy, setReauthBusy] = useState(false);
   const [violationScore, setViolationScore] = useState<number | null>(null);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
 
   // ─── ADDED: Section State for structural rendering ────────────────────
   const [sections, setSections] = useState<SectionContent[]>([]);
@@ -232,7 +235,7 @@ export function ExamAttempt() {
   );
 
   const updateAnswer = useCallback(
-    (questionId: number, payload: SavedAnswer) => {
+    async (questionId: number, payload: SavedAnswer) => {
       if (editLockRef.current || statusRef.current !== 'active') return;
       setAnswers((previous) => {
         const next = { ...previous, [questionId]: payload };
@@ -244,9 +247,23 @@ export function ExamAttempt() {
         if (payload.text !== undefined) draft[questionId] = payload.text;
         writeTextDraft(attemptId, draft);
       }
-      queueAnswer(questionId, payload);
+
+      // Use new sync service
+      try {
+        await answerSync.queueAnswer(
+          Number(attemptId),
+          questionId,
+          payload.option_id ?? null,
+          payload.text ?? null,
+          realRef.current
+        );
+        setSyncStatus('synced');
+      } catch (error) {
+        console.error('Failed to queue answer:', error);
+        setSyncStatus('error');
+      }
     },
-    [attemptId, queueAnswer],
+    [attemptId],
   );
 
   // --- anti-cheat reporting (Real Exam flow only) -------------------------
@@ -292,7 +309,9 @@ export function ExamAttempt() {
       setSubmitting(true);
       setError('');
       try {
-        await flushAll(auto ? 1200 : 2500);
+        // Flush all pending answers using sync service
+        await answerSync.flush(Number(attemptId), realRef.current);
+
         if (realRef.current) {
           const result = await realExamApi.submit(Number(attemptId));
           endedRef.current = true;
@@ -346,7 +365,7 @@ export function ExamAttempt() {
         setSubmitting(false);
       }
     },
-    [attemptId, examId, flushAll, navigate, questions],
+    [attemptId, examId, navigate, questions],
   );
 
   // --- bootstrap ----------------------------------------------------------
@@ -385,7 +404,7 @@ export function ExamAttempt() {
         let questionRows: QuestionPayload[] = [];
         let sectionData: SectionContent[] = [];
         let generalInstructions: string | null = null;
-        
+
         let expiresAt: string | null = attemptRecord.expires_at ?? null;
         let status: 'active' | 'locked' | 'ended' = 'active';
         let publicSettings: RealExamPublicSettings | null = null;
@@ -406,7 +425,7 @@ export function ExamAttempt() {
             violationRef.current = snapshot.violation_score;
             setViolationScore(snapshot.violation_score);
           }
-          
+
           // ─── FETCH QUESTIONS AND SECTIONS ────────────────────────────────
           const res = await realExamApi.questions(Number(attemptId), controller.signal);
           if (cancelled) return;
@@ -452,6 +471,14 @@ export function ExamAttempt() {
         setLocked(status === 'locked');
         setSaveState('saved');
         setPhase('ready');
+
+        // Load autosave configuration
+        await answerSync.loadConfig(examRecord.id);
+
+        // Register sync status callback
+        answerSync.onStatusChange(Number(attemptId), (status) => {
+          setSyncStatus(status);
+        });
 
         // Request fullscreen for all exams (both real and standard) to ensure exam integrity
         void requestFullscreen();
@@ -526,6 +553,15 @@ export function ExamAttempt() {
     const handle = window.setInterval(() => void resync(), interval);
     return () => window.clearInterval(handle);
   }, [attemptId, examId, navigate, phase]);
+
+  // --- cleanup sync service on unmount ------------------------------------
+  useEffect(() => {
+    return () => {
+      if (attemptId) {
+        void answerSync.cleanup(Number(attemptId));
+      }
+    };
+  }, [attemptId]);
 
   // --- anti-cheat listeners (Real Exam flow) ------------------------------
   useEffect(() => {
@@ -741,10 +777,10 @@ export function ExamAttempt() {
   const readOnly = attemptStatus !== 'active';
 
   const warnThreshold = settingsRef.current?.escalation_warn_at ?? null;
+  const lockAt = settingsRef.current?.escalation_lock_at ?? null;
   const thresholdReached =
     violationScore !== null &&
-    ((settingsRef.current ? (settingsRef.current.escalation_lock_at ?? null) : null) ?? 999) <=
-      violationScore;
+    (lockAt ?? 999) <= violationScore;
   const warned =
     violationScore !== null && warnThreshold !== null && violationScore >= warnThreshold;
 
@@ -784,42 +820,44 @@ export function ExamAttempt() {
         </div>
 
         <div className="save-status" data-testid="status-save">
-          {saveState === 'saved' && (
+          {syncStatus === 'synced' && (
             <>
               <Check size={15} /> Saved on server
             </>
           )}
-          {saveState === 'saving' && (
+          {syncStatus === 'syncing' && (
             <>
-              <span className="save-dot" /> Saving…
+              <span className="save-dot" /> Syncing…
             </>
           )}
-          {saveState === 'idle' && (
+          {syncStatus === 'idle' && (
             <>
               <Check size={15} /> Ready
             </>
           )}
-          {saveState === 'error' && (
+          {syncStatus === 'offline' && (
             <>
-              <CircleAlert size={15} /> Not saved — retry
+              <WifiOff size={15} /> Offline — saved locally
+            </>
+          )}
+          {syncStatus === 'error' && (
+            <>
+              <CircleAlert size={15} /> Sync error — retry
             </>
           )}
         </div>
 
-        {saveState === 'error' && (
+        {syncStatus === 'error' && (
           <button
             type="button"
             className="button button-secondary"
             data-testid="button-retry-save"
             onClick={() => {
-              setSaveState('saving');
-              void (async () => {
-                for (const id of [...pendingRef.current.keys()]) await flushQuestion(id);
-                setSaveState(pendingRef.current.size ? 'error' : 'saved');
-              })();
+              setSyncStatus('syncing');
+              void answerSync.sync(Number(attemptId), realRef.current);
             }}
           >
-            Retry save
+            Retry sync
           </button>
         )}
 
@@ -978,7 +1016,12 @@ export function ExamAttempt() {
                     data-testid={`question-passage-${groupPassage.id}`}
                   >
                     {groupPassage.title && <h4>{groupPassage.title}</h4>}
-                    <div className="passage-body">{groupPassage.content}</div>
+                    {/* Passages are written as markdown-lite (headings, tables,
+                        lists, images) — rendered as sanitised HTML. */}
+                    <div
+                      className="passage-body passage-rich"
+                      dangerouslySetInnerHTML={{ __html: renderRichText(groupPassage.content) }}
+                    />
                   </div>
                 )}
               </div>
@@ -989,7 +1032,7 @@ export function ExamAttempt() {
               {question.question_image && (
                 <div className="question-image" style={{ marginBottom: '1rem' }}>
                   <img
-                    src={question.question_image}
+                    src={resolveQuestionImage(question.question_image) ?? undefined}
                     alt="Question visual"
                     style={{ maxWidth: '100%', maxHeight: '350px', borderRadius: '6px' }}
                   />
@@ -1246,7 +1289,7 @@ function AnswerField({
   disabled?: boolean;
   onChange: (answer: SavedAnswer) => void;
 }) {
-  // Matching question rendering
+  // Matching question rendering — Column A / Column B layout
   if (question.question_type === 'matching') {
     const leftItems = question.matching_data?.left_items ?? [];
     const rightOptions = question.matching_data?.right_options ?? [];
@@ -1263,58 +1306,187 @@ function AnswerField({
       }
     }
 
+    const [pickedLeft, setPickedLeft] = useState<string | null>(null);
+    const [pickedRight, setPickedRight] = useState<string | null>(null);
+
+    const matchedLeftTexts = Object.keys(currentMatches);
+    const matchedRightTexts = Object.values(currentMatches);
+
+    const pickLeft = (leftText: string) => {
+      if (pickedLeft === leftText) {
+        setPickedLeft(null);
+        return;
+      }
+      setPickedLeft(leftText);
+      if (pickedRight) {
+        const next = { ...currentMatches, [leftText]: pickedRight };
+        onChange({ option_id: null, text: JSON.stringify(next) });
+        setPickedLeft(null);
+        setPickedRight(null);
+      }
+    };
+
+    const pickRight = (rightText: string) => {
+      if (pickedRight === rightText) {
+        setPickedRight(null);
+        return;
+      }
+      setPickedRight(rightText);
+      if (pickedLeft) {
+        const next = { ...currentMatches, [pickedLeft]: rightText };
+        onChange({ option_id: null, text: JSON.stringify(next) });
+        setPickedLeft(null);
+        setPickedRight(null);
+      }
+    };
+
+    const isLeftMatched = (text: string) => matchedLeftTexts.includes(text);
+    const isRightMatched = (text: string) => matchedRightTexts.includes(text);
+    const isLeftPicked = (text: string) => pickedLeft === text;
+    const isRightPicked = (text: string) => pickedRight === text;
+
     if (leftItems.length > 0 && rightOptions.length > 0) {
       return (
         <div
-          className="matching-student-board"
+          className="matching-column-board"
           style={{ margin: '1.25rem 0' }}
           data-testid={`matching-board-${question.id}`}
         >
           <div style={{ marginBottom: '0.75rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-            Select the matching item on the right for each prompt on the left:
+            Click one item in Column A, then its match in Column B.
           </div>
-          <div style={{ display: 'grid', gap: '0.75rem' }}>
-            {leftItems.map((left, idx) => {
-              const selectedValue = currentMatches[left.text] ?? '';
-              return (
-                <div
-                  key={left.id ?? idx}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'minmax(140px, 1fr) auto minmax(180px, 1.5fr)',
-                    gap: '0.75rem',
-                    alignItems: 'center',
-                    background: 'var(--bg-subtle, #f8fafc)',
-                    padding: '0.75rem 1rem',
-                    borderRadius: '8px',
-                    border: '1px solid var(--border-color, #e2e8f0)',
-                  }}
-                  data-testid={`matching-row-${question.id}-${idx}`}
-                >
-                  <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>{left.text}</span>
-                  <span style={{ color: 'var(--text-muted)', fontWeight: 'bold' }}>➔</span>
-                  <select
-                    className="select"
-                    value={selectedValue}
+          <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'flex-start' }}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div style={{
+                fontWeight: 700,
+                textAlign: 'center',
+                padding: '0.5rem',
+                background: 'var(--bg-subtle, #f8fafc)',
+                border: '1px solid var(--border-color, #e2e8f0)',
+                borderRadius: '6px',
+                color: 'var(--text-muted)',
+              }}>
+                Column A
+              </div>
+              {leftItems.map((left) => {
+                const matched = isLeftMatched(left.text);
+                const picked = isLeftPicked(left.text);
+                return (
+                  <button
+                    key={left.id ?? left.text}
+                    type="button"
+                    onClick={() => pickLeft(left.text)}
                     disabled={disabled}
-                    onChange={(e) => {
-                      const next = { ...currentMatches, [left.text]: e.target.value };
-                      onChange({ option_id: null, text: JSON.stringify(next) });
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      padding: '0.6rem 0.8rem',
+                      border: matched
+                        ? '2px solid var(--success-color, #10b981)'
+                        : picked
+                          ? '2px solid var(--primary-color, #3b82f6)'
+                          : '1px solid var(--border-color, #e2e8f0)',
+                      borderRadius: '6px',
+                      background: matched
+                        ? 'var(--success-bg, #ecfdf5)'
+                        : picked
+                          ? 'var(--primary-bg, #eff6ff)'
+                          : 'transparent',
+                      cursor: disabled ? 'not-allowed' : 'pointer',
+                      textAlign: 'left',
+                      fontSize: '0.95rem',
+                      color: matched ? 'var(--success-color, #10b981)' : 'inherit',
                     }}
-                    data-testid={`matching-select-${question.id}-${idx}`}
-                    aria-label={`Match for ${left.text}`}
                   >
-                    <option value="">-- Choose match --</option>
-                    {rightOptions.map((right) => (
-                      <option key={right.id} value={right.text}>
-                        {right.text}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              );
-            })}
+                    {matched && (
+                      <span style={{ color: 'var(--success-color, #10b981)', fontWeight: 700 }}>
+                        ✓
+                      </span>
+                    )}
+                    {picked && (
+                      <span style={{ color: 'var(--primary-color, #3b82f6)', fontWeight: 700 }}>
+                        ●
+                      </span>
+                    )}
+                    <span
+                      style={{ flex: 1, textDecoration: matched ? 'line-through' : 'none' }}
+                    >
+                      {left.text}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div style={{
+                fontWeight: 700,
+                textAlign: 'center',
+                padding: '0.5rem',
+                background: 'var(--bg-subtle, #f8fafc)',
+                border: '1px solid var(--border-color, #e2e8f0)',
+                borderRadius: '6px',
+                color: 'var(--text-muted)',
+              }}>
+                Column B
+              </div>
+              {rightOptions.map((right) => {
+                const matched = isRightMatched(right.text);
+                const picked = isRightPicked(right.text);
+                return (
+                  <button
+                    key={right.id}
+                    type="button"
+                    onClick={() => pickRight(right.text)}
+                    disabled={disabled}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      padding: '0.6rem 0.8rem',
+                      border: matched
+                        ? '2px solid var(--success-color, #10b981)'
+                        : picked
+                          ? '2px solid var(--primary-color, #3b82f6)'
+                          : '1px solid var(--border-color, #e2e8f0)',
+                      borderRadius: '6px',
+                      background: matched
+                        ? 'var(--success-bg, #ecfdf5)'
+                        : picked
+                          ? 'var(--primary-bg, #eff6ff)'
+                          : 'transparent',
+                      cursor: disabled ? 'not-allowed' : 'pointer',
+                      textAlign: 'left',
+                      fontSize: '0.95rem',
+                      color: matched ? 'var(--success-color, #10b981)' : 'inherit',
+                    }}
+                  >
+                    {matched && (
+                      <span style={{ color: 'var(--success-color, #10b981)', fontWeight: 700 }}>
+                        ✓
+                      </span>
+                    )}
+                    {picked && (
+                      <span style={{ color: 'var(--primary-color, #3b82f6)', fontWeight: 700 }}>
+                        ●
+                      </span>
+                    )}
+                    <span
+                      style={{ flex: 1, textDecoration: matched ? 'line-through' : 'none' }}
+                    >
+                      {right.text}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
+          {matchedLeftTexts.length > 0 && (
+            <div style={{ marginTop: '0.75rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+              Matched {matchedLeftTexts.length} of{' '}
+              {Math.min(leftItems.length, rightOptions.length)}
+            </div>
+          )}
         </div>
       );
     }
