@@ -44,6 +44,7 @@ export interface User {
   phone_number?: string | null;
   gender?: string | null;
   department_id?: number | null;
+  dept_id?: number | null;
   department?: string | null;
   department_detail?: { id: number; name: string; abbreviation?: string | null } | null;
   university?: {

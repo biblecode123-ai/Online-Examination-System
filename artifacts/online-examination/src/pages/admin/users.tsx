@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi, adminExamApi } from '../../lib/endpoints';
 import { UserPlus, Edit, Trash2, Power, PowerOff, Search, Upload, Users, Shield, Filter } from 'lucide-react';
@@ -69,19 +69,27 @@ export function AdminUsers() {
     },
   });
 
-  if (isLoading) {
-    return (
-      <div className="page">
-        <div className="loading-block">
-          <span className="spinner" aria-hidden="true" />
-          Loading users...
-        </div>
-      </div>
-    );
-  }
-
   const userList = users?.data ?? [];
-  const totalUsers = users?.meta?.total || 0;
+
+  // Defensive client-side filtering ensures the table matches selection instantly
+  const displayUsers = useMemo(() => {
+    if (!departmentFilter) return userList;
+    const selectedDept = departments.find((d) => d.id === departmentFilter);
+    const selectedDeptName = selectedDept?.name.toLowerCase();
+
+    return userList.filter((u) => {
+      if (u.department_id && u.department_id === departmentFilter) return true;
+      if (u.dept_id && u.dept_id === departmentFilter) return true;
+      if (u.department_detail?.id && u.department_detail.id === departmentFilter) return true;
+      if (selectedDeptName && u.department) {
+        const deptLower = u.department.toLowerCase();
+        return deptLower.includes(selectedDeptName) || selectedDeptName.includes(deptLower);
+      }
+      return false;
+    });
+  }, [userList, departmentFilter, departments]);
+
+  const totalUsers = departmentFilter ? displayUsers.length : (users?.meta?.total || userList.length);
 
   const getRoleBadgeClass = (role: string) => {
     switch (role) {
@@ -134,7 +142,7 @@ export function AdminUsers() {
               <Shield size={20} />
             </div>
             <div className="user-stat-content">
-              <strong>{userList.filter(u => u.is_active).length}</strong>
+              <strong>{displayUsers.filter(u => u.is_active).length}</strong>
               <small>Active Users</small>
             </div>
           </div>
@@ -143,7 +151,7 @@ export function AdminUsers() {
               <PowerOff size={20} />
             </div>
             <div className="user-stat-content">
-              <strong>{userList.filter(u => !u.is_active).length}</strong>
+              <strong>{displayUsers.filter(u => !u.is_active).length}</strong>
               <small>Inactive Users</small>
             </div>
           </div>
@@ -157,7 +165,10 @@ export function AdminUsers() {
                 type="text"
                 placeholder="Search by name or email..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
                 className="search-input"
               />
             </div>
@@ -166,7 +177,10 @@ export function AdminUsers() {
                 <Filter size={14} className="filter-icon" />
                 <select
                   value={roleFilter}
-                  onChange={(e) => setRoleFilter(e.target.value)}
+                  onChange={(e) => {
+                    setRoleFilter(e.target.value);
+                    setPage(1);
+                  }}
                   className="filter-select"
                 >
                   <option value="">All Roles</option>
@@ -179,7 +193,10 @@ export function AdminUsers() {
               <div className="filter-select-wrapper">
                 <select
                   value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
+                  onChange={(e) => {
+                    setStatusFilter(e.target.value);
+                    setPage(1);
+                  }}
                   className="filter-select"
                 >
                   <option value="">All Status</option>
@@ -191,7 +208,10 @@ export function AdminUsers() {
                 <Filter size={14} className="filter-icon" />
                 <select
                   value={departmentFilter ?? ''}
-                  onChange={(e) => { setDepartmentFilter(e.target.value ? Number(e.target.value) : null); setPage(1); }}
+                  onChange={(e) => {
+                    setDepartmentFilter(e.target.value ? Number(e.target.value) : null);
+                    setPage(1);
+                  }}
                   className="filter-select"
                   disabled={departmentsLoading || departmentsError != null}
                   title={departmentsError ? 'Failed to load departments' : undefined}
@@ -227,7 +247,16 @@ export function AdminUsers() {
                 </tr>
               </thead>
               <tbody>
-                {userList.length === 0 ? (
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={5} className="empty-table">
+                      <div className="loading-block">
+                        <span className="spinner" aria-hidden="true" />
+                        Loading users...
+                      </div>
+                    </td>
+                  </tr>
+                ) : displayUsers.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="empty-table">
                       <div className="empty-state">
@@ -238,7 +267,7 @@ export function AdminUsers() {
                     </td>
                   </tr>
                 ) : (
-                  userList.map((user) => (
+                  displayUsers.map((user) => (
                     <tr key={user.id}>
                       <td>
                         <div className="user-cell">

@@ -466,10 +466,24 @@ export const adminApi = {
     page?: number;
     perPage?: number;
   }): Promise<Paginated<User>> {
-    const body = await apiRequest<Paginated<User>>('/v1/admin/users', {
+    const body = await apiRequest<any>('/v1/admin/users', {
       query: params,
     });
-    return body;
+    if (body?.data && Array.isArray(body.data.data)) {
+      return {
+        data: body.data.data,
+        meta: {
+          total: body.data.pagination?.total ?? body.pagination?.total ?? body.data.counts?.all ?? body.data.data.length,
+          current_page: body.data.pagination?.current_page ?? body.pagination?.current_page ?? params?.page ?? 1,
+          per_page: body.data.pagination?.per_page ?? body.pagination?.per_page ?? params?.perPage ?? 20,
+          last_page: body.data.pagination?.total_pages ?? body.pagination?.total_pages ?? 1,
+        },
+      };
+    }
+    if (Array.isArray(body?.data)) {
+      return body;
+    }
+    return { data: [], meta: { total: 0 } };
   },
 
   /**
