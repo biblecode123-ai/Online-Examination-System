@@ -75,8 +75,9 @@ export function AdminExamCreate() {
     const list = deptQuery.data ?? [];
     const set = new Set<string>();
     for (const d of list) {
-      if (d.college && d.college.trim()) {
-        set.add(d.college.trim());
+      const col = typeof d.college === 'string' ? d.college.trim() : '';
+      if (col) {
+        set.add(col);
       }
     }
     return Array.from(set).sort();
@@ -87,12 +88,17 @@ export function AdminExamCreate() {
     const list = deptQuery.data ?? [];
     const q = deptSearch.trim().toLowerCase();
     return list.filter((dept) => {
+      const name = String(dept.name ?? '').toLowerCase();
+      const col = typeof dept.college === 'string' ? dept.college.toLowerCase() : '';
+      const abbr = typeof dept.abbreviation === 'string' ? dept.abbreviation.toLowerCase() : '';
       const matchesSearch =
         !q ||
-        dept.name.toLowerCase().includes(q) ||
-        (dept.college && dept.college.toLowerCase().includes(q)) ||
-        (dept.abbreviation && dept.abbreviation.toLowerCase().includes(q));
-      const matchesCollege = selectedCollege === 'all' || dept.college === selectedCollege;
+        name.includes(q) ||
+        col.includes(q) ||
+        abbr.includes(q);
+      const matchesCollege =
+        selectedCollege === 'all' ||
+        (typeof dept.college === 'string' && dept.college.trim() === selectedCollege);
       return matchesSearch && matchesCollege;
     });
   }, [deptQuery.data, deptSearch, selectedCollege]);

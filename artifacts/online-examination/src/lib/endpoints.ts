@@ -1522,51 +1522,117 @@ export const adminExamApi = {
 
   /** GET /v1/departments/list-all or /v1/departments — reference list for filters and pickers. Fetches all departments. */
   async departments(signal?: AbortSignal): Promise<{ id: number; name: string; college?: string | null; abbreviation?: string | null }[]> {
+    const normalizeRow = (
+      raw: any,
+      collegeLookup?: Map<number, { name: string; abbreviation?: string | null }>
+    ) => {
+      let collegeName: string | null = null;
+      let abbr: string | null = null;
+
+      if (raw.college && typeof raw.college === 'object') {
+        collegeName = typeof raw.college.name === 'string' ? raw.college.name.trim() : null;
+        abbr = typeof raw.college.abbreviation === 'string' ? raw.college.abbreviation.trim() : null;
+      } else if (typeof raw.college === 'string' && raw.college.trim()) {
+        collegeName = raw.college.trim();
+      }
+
+      if (!collegeName && raw.college_id && collegeLookup?.has(Number(raw.college_id))) {
+        const found = collegeLookup.get(Number(raw.college_id))!;
+        collegeName = found.name;
+        if (!abbr) abbr = found.abbreviation ?? null;
+      }
+
+      if (!abbr && typeof raw.abbreviation === 'string' && raw.abbreviation.trim()) {
+        abbr = raw.abbreviation.trim();
+      }
+
+      return {
+        id: Number(raw.id),
+        name: String(raw.name ?? '').trim(),
+        college: collegeName,
+        abbreviation: abbr,
+      };
+    };
+
+    // Load college lookup dictionary if available to enrich departments
+    const collegeLookup = new Map<number, { name: string; abbreviation?: string | null }>();
+    try {
+      const colRes = await apiRequest<{
+        data?: Array<{ id: number; name: string; abbreviation?: string | null }>;
+      }>('/v1/colleges', { query: { per_page: 100 }, signal });
+      for (const c of colRes?.data ?? []) {
+        collegeLookup.set(Number(c.id), {
+          name: String(c.name ?? '').trim(),
+          abbreviation: c.abbreviation ? String(c.abbreviation).trim() : null,
+        });
+      }
+    } catch {
+      // Non-fatal if colleges endpoint fails
+    }
+
     try {
       // First try /v1/departments/list-all which returns all departments at once without pagination cap
-      const envelope = await apiRequest<{ success?: boolean; data?: { id: number; name: string; college?: string | null; abbreviation?: string | null }[] }>(
-        '/v1/departments/list-all',
-        { signal },
-      );
+      const envelope = await apiRequest<{
+        success?: boolean;
+        data?: any[];
+      }>('/v1/departments/list-all', { signal });
+
       if (envelope && Array.isArray(envelope.data) && envelope.data.length > 0) {
-        return envelope.data;
+        return envelope.data
+          .filter((d) => d && d.id)
+          .map((d) => normalizeRow(d, collegeLookup))
+          .sort((a, b) => a.name.localeCompare(b.name));
       }
     } catch {
       // Fallback to paginated /v1/departments
     }
 
     const items: { id: number; name: string; college?: string | null; abbreviation?: string | null }[] = [];
-    let lastPage = 1;
-    for (let page = 1; page <= 25; page += 1) {
-      const response = await apiRequest<unknown>('/v1/departments', {
+    const seen = new Set<number>();
+    let totalPages = 1;
+
+    for (let page = 1; page <= 30; page += 1) {
+      const response = await apiRequest<any>('/v1/departments', {
         query: { page, per_page: 100 },
         signal,
       });
 
-      let pageItems: { id: number; name: string; college?: string | null; abbreviation?: string | null }[] = [];
-      let paginatorLastPage = 1;
-
+      let pageItems: any[] = [];
       if (Array.isArray(response)) {
-        pageItems = response as { id: number; name: string; college?: string | null; abbreviation?: string | null }[];
+        pageItems = response;
       } else if (response && typeof response === 'object') {
-        const obj = response as Record<string, unknown>;
-        // Envelope shape: { success, data: [...] }
-        if (Array.isArray(obj.data)) {
-          pageItems = obj.data as { id: number; name: string; college?: string | null; abbreviation?: string | null }[];
+        if (Array.isArray(response.data)) {
+          pageItems = response.data;
+        } else if (response.data && Array.isArray(response.data.data)) {
+          pageItems = response.data.data;
         }
-        // Paginator shape: { data: [...], last_page, ... } or { success, data: { data: [...], last_page } }
-        else if (obj.data && typeof obj.data === 'object' && !Array.isArray(obj.data) && 'data' in obj.data && Array.isArray((obj.data as Record<string, unknown>).data)) {
-          const paginator = obj.data as Record<string, unknown>;
-          pageItems = (paginator.data as { id: number; name: string; college?: string | null; abbreviation?: string | null }[]) ?? [];
-          paginatorLastPage = Number(paginator.last_page ?? 1);
+
+        const metaPagination = response.meta?.pagination;
+        const pageTotal = Number(
+          metaPagination?.total_pages ??
+          response.meta?.last_page ??
+          response.last_page ??
+          response.data?.last_page ??
+          1
+        );
+        if (pageTotal > totalPages) {
+          totalPages = pageTotal;
         }
       }
 
-      items.push(...pageItems);
-      lastPage = paginatorLastPage;
-      if (page >= lastPage || pageItems.length === 0) break;
+      for (const row of pageItems) {
+        if (!row || !row.id) continue;
+        const id = Number(row.id);
+        if (!seen.has(id)) {
+          seen.add(id);
+          items.push(normalizeRow(row, collegeLookup));
+        }
+      }
+
+      if (page >= totalPages || pageItems.length === 0) break;
     }
-    return items;
+
+    return items.sort((a, b) => a.name.localeCompare(b.name));
   },
 
   /** GET /v1/exam-categories — the Real Exam category is fetched, never hardcoded. */
