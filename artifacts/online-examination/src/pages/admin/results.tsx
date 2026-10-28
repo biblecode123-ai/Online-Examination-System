@@ -6,9 +6,17 @@ import {
   ArrowUp,
   ArrowUpDown,
   BarChart3,
+  BookOpen,
+  Building2,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   ClipboardList,
+  Clock,
   Download,
   FileCheck2,
+  FileText,
+  GraduationCap,
   Hourglass,
   ListChecks,
   MinusCircle,
@@ -17,11 +25,6 @@ import {
   RotateCcw,
   Search,
   Users,
-  ChevronRight,
-  ChevronLeft,
-  BookOpen,
-  Clock,
-  CheckCircle2,
   XCircle,
 } from 'lucide-react';
 import { adminApi, adminExamApi } from '../../lib/endpoints';
@@ -37,7 +40,6 @@ import type {
 } from '../../lib/types';
 
 const PER_PAGE_OPTIONS = [25, 50, 100];
-const EXAMS_PER_PAGE = 10;
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All statuses' },
@@ -264,25 +266,31 @@ function AttemptQuestions({ attemptId }: { attemptId: number }) {
   );
 }
 
+interface DepartmentCluster {
+  id: number;
+  name: string;
+  exams: AdminRealExam[];
+  totalAttempts: number;
+  assignedStudents: number;
+}
+
 export function AdminResults() {
   const [params, setParams] = useSearchParams();
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<unknown>(null);
-  const [selectedExamId, setSelectedExamId] = useState<number | null>(null);
-  const [examPage, setExamPage] = useState(1);
   const [expandedAttemptId, setExpandedAttemptId] = useState<number | null>(null);
   const [selectedDepartmentId, setSelectedDepartmentId] = useState<number | null>(null);
+  const [examSearch, setExamSearch] = useState('');
 
   const urlSearch = params.get('search') ?? '';
   const [searchInput, setSearchInput] = useState(urlSearch);
 
-  // Keep the search box aligned with the URL when the URL changes elsewhere
-  // (for example when the browser's back button is used).
+  // Keep the search box aligned with the URL when the browser's back button is used
   useEffect(() => {
     setSearchInput(urlSearch);
   }, [urlSearch]);
 
-  // The search term is debounced before it reaches the server.
+  // The search term for student attempts is debounced before it reaches the server
   useEffect(() => {
     if (searchInput === urlSearch) return;
     const timer = window.setTimeout(() => {
@@ -300,10 +308,12 @@ export function AdminResults() {
     return () => window.clearTimeout(timer);
   }, [searchInput, urlSearch, setParams]);
 
+  const selectedExamId = toInt(params.get('exam_id'));
+
   const filters = useMemo<AdminResultsFilters>(
     () => ({
       search: urlSearch || undefined,
-      exam_id: toInt(params.get('exam_id')),
+      exam_id: selectedExamId,
       department_id: toInt(params.get('department_id')),
       category_id: toInt(params.get('category_id')),
       status: params.get('status') || undefined,
@@ -317,31 +327,33 @@ export function AdminResults() {
       page: toInt(params.get('page')) ?? 1,
       per_page: toInt(params.get('per_page')) ?? 25,
     }),
-    [params, urlSearch],
+    [params, urlSearch, selectedExamId],
   );
 
+  // Queries
   const resultsQuery = useAdminResults(filters);
   const optionsQuery = useAdminResultOptions();
-  const examSummaryQuery = useAdminExamResults(filters.exam_id ?? null);
+  const examSummaryQuery = useAdminExamResults(selectedExamId ?? null);
 
-  // The governed exam list; pagination below is client-side over this list.
-  const examsQuery = useQuery({
-    queryKey: ['admin-exams-list'],
+  // Fetch only REAL EXAMS (authoritative governed real-exams endpoint)
+  const realExamsQuery = useQuery({
+    queryKey: ['admin-real-exams-list'],
     queryFn: ({ signal }) => adminExamApi.listExams(signal),
+    staleTime: 60_000,
   });
 
-  // Teacher account ids — this page only lists the exams those users created.
-  const teachersQuery = useQuery({
-    queryKey: ['admin-teacher-ids'],
-    queryFn: ({ signal }) => adminApi.listTeacherIds(signal),
+  // Fetch departments list
+  const departmentsQuery = useQuery({
+    queryKey: ['admin-departments-all'],
+    queryFn: () => adminApi.listDepartments({ per_page: 100 }),
     staleTime: 5 * 60_000,
-    retry: 1,
   });
 
   const options = optionsQuery.data;
   const page = resultsQuery.data;
   const rows = page?.results ?? [];
   const summary = page?.summary;
+  const realExams = realExamsQuery.data?.items ?? [];
 
   const updateParam = (name: string, value: string | undefined) => {
     setParams(
@@ -373,23 +385,17 @@ export function AdminResults() {
     );
   };
 
-  const clearFilters = () => {
+  const clearAttemptFilters = () => {
     setSearchInput('');
-    setParams(new URLSearchParams(), { replace: true });
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams();
+        if (selectedExamId) next.set('exam_id', String(selectedExamId));
+        return next;
+      },
+      { replace: true },
+    );
   };
-
-  const activeFilterCount = [
-    filters.search,
-    filters.exam_id,
-    filters.department_id,
-    filters.category_id,
-    filters.status,
-    filters.outcome,
-    filters.from_date,
-    filters.to_date,
-    filters.min_score,
-    filters.max_score,
-  ].filter((value) => value !== undefined && value !== '').length;
 
   const handleExport = async () => {
     setExporting(true);
@@ -403,7 +409,9 @@ export function AdminResults() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `results_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      link.download = `results_${selectedExamId ? `exam_${selectedExamId}_` : ''}${new Date()
+        .toISOString()
+        .slice(0, 10)}.xlsx`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -415,127 +423,155 @@ export function AdminResults() {
     }
   };
 
-  const handleExamClick = (examId: number) => {
-    setSelectedExamId(examId);
-    updateParam('exam_id', String(examId));
+  // Clicking an exam card drills down into its student attempts
+  const handleExamClick = (exam: AdminRealExam) => {
+    updateParam('exam_id', String(exam.id));
+    if (exam.department_id) {
+      updateParam('department_id', String(exam.department_id));
+    }
   };
 
+  // Returning to the department clusters view
   const handleBackToExams = () => {
-    setSelectedExamId(null);
     updateParam('exam_id', undefined);
   };
 
-  // Client-side pagination over the teacher-created exam list. When the backend
-  // sends no created_by at all (or no teacher ids could be loaded) the creators
-  // cannot be told apart, so the unfiltered list is shown rather than nothing.
-  const allExams = examsQuery.data?.items ?? [];
-  const teacherIdSet = teachersQuery.data ? new Set(teachersQuery.data) : null;
-  const creatorInfoPresent = allExams.some((exam) => exam.created_by != null);
-  const teacherExams = useMemo(() => {
-    if (!teacherIdSet || teacherIdSet.size === 0 || !creatorInfoPresent) return allExams;
-    return allExams.filter(
-      (exam) => exam.created_by != null && teacherIdSet.has(exam.created_by),
-    );
-  }, [allExams, teacherIdSet, creatorInfoPresent]);
-  const totalExams = teacherExams.length;
-  const examLastPage = Math.max(1, Math.ceil(totalExams / EXAMS_PER_PAGE));
-  const currentExamPage = Math.min(examPage, examLastPage);
-  const paginatedExams = teacherExams.slice(
-    (currentExamPage - 1) * EXAMS_PER_PAGE,
-    currentExamPage * EXAMS_PER_PAGE,
+  // Cluster real exams by department
+  const departmentClusters = useMemo(() => {
+    const deptMap = new Map<
+      number,
+      { name: string; exams: AdminRealExam[]; totalAttempts: number; assignedStudents: number }
+    >();
+
+    // Seed known departments
+    for (const d of optionsQuery.data?.departments ?? []) {
+      deptMap.set(d.id, {
+        name: d.name,
+        exams: [],
+        totalAttempts: 0,
+        assignedStudents: 0,
+      });
+    }
+    for (const d of departmentsQuery.data?.items ?? []) {
+      if (!deptMap.has(d.id)) {
+        deptMap.set(d.id, {
+          name: d.name,
+          exams: [],
+          totalAttempts: 0,
+          assignedStudents: 0,
+        });
+      }
+    }
+
+    const generalDeptId = 0;
+    if (!deptMap.has(generalDeptId)) {
+      deptMap.set(generalDeptId, {
+        name: 'General / University-wide',
+        exams: [],
+        totalAttempts: 0,
+        assignedStudents: 0,
+      });
+    }
+
+    // Place each real exam into its department cluster
+    for (const exam of realExams) {
+      // Filter by exam search text if entered
+      if (examSearch.trim()) {
+        const q = examSearch.toLowerCase();
+        const matchesTitle = (exam.exam_title ?? '').toLowerCase().includes(q);
+        const matchesCat = (exam.category?.name ?? '').toLowerCase().includes(q);
+        const matchesDesc = (exam.description ?? '').toLowerCase().includes(q);
+        if (!matchesTitle && !matchesCat && !matchesDesc) {
+          continue;
+        }
+      }
+
+      const dId = exam.department_id ?? generalDeptId;
+      if (!deptMap.has(dId)) {
+        deptMap.set(dId, {
+          name: `Department #${dId}`,
+          exams: [],
+          totalAttempts: 0,
+          assignedStudents: 0,
+        });
+      }
+
+      const cluster = deptMap.get(dId)!;
+      cluster.exams.push(exam);
+      cluster.totalAttempts += (exam.completed_attempts ?? 0) + (exam.ongoing_attempts ?? 0);
+      cluster.assignedStudents += exam.assigned_count ?? exam.assigned_students?.length ?? 0;
+    }
+
+    const clusters: DepartmentCluster[] = [];
+    deptMap.forEach((val, id) => {
+      if (val.exams.length > 0) {
+        clusters.push({
+          id,
+          name: val.name,
+          exams: val.exams,
+          totalAttempts: val.totalAttempts,
+          assignedStudents: val.assignedStudents,
+        });
+      }
+    });
+
+    // Sort alphabetically with general cluster at the end
+    clusters.sort((a, b) => {
+      if (a.id === 0) return 1;
+      if (b.id === 0) return -1;
+      return a.name.localeCompare(b.name);
+    });
+
+    return clusters;
+  }, [realExams, optionsQuery.data?.departments, departmentsQuery.data?.items, examSearch]);
+
+  const visibleClusters = useMemo(() => {
+    if (selectedDepartmentId === null) return departmentClusters;
+    return departmentClusters.filter((c) => c.id === selectedDepartmentId);
+  }, [departmentClusters, selectedDepartmentId]);
+
+  // Active exam info when viewing attempts
+  const activeRealExam = useMemo(
+    () => realExams.find((e) => e.id === selectedExamId),
+    [realExams, selectedExamId],
   );
 
-  // The Examination dropdown mirrors the teacher-only scope of the list above.
-  const examFilterOptions = useMemo(() => {
-    const all = options?.exams ?? [];
-    if (!teacherIdSet || teacherIdSet.size === 0 || !creatorInfoPresent) return all;
-    const ids = new Set(teacherExams.map((exam) => exam.id));
-    const filtered = all.filter((exam) => ids.has(exam.id));
-    // Keep whatever exam is already selected visible even if it is out of scope.
-    if (filters.exam_id !== undefined && !filtered.some((exam) => exam.id === filters.exam_id)) {
-      const current = all.find((exam) => exam.id === filters.exam_id);
-      if (current) filtered.push(current);
-    }
-    return filtered;
-  }, [options, teacherIdSet, creatorInfoPresent, teacherExams, filters.exam_id]);
-
-  const filterSummary = useMemo(() => {
-    const parts: string[] = [];
-    if (filters.search) parts.push(`Search “${filters.search}”`);
-    if (filters.exam_id) {
-      const exam = options?.exams.find((item) => item.id === filters.exam_id);
-      parts.push(`Exam ${exam ? `“${exam.title}”` : `#${filters.exam_id}`}`);
-    }
-    if (filters.department_id) {
-      const department = options?.departments.find((item) => item.id === filters.department_id);
-      parts.push(`Department ${department ? `“${department.name}”` : `#${filters.department_id}`}`);
-    }
-    if (filters.category_id) {
-      const category = options?.categories.find((item) => item.id === filters.category_id);
-      parts.push(`Category ${category ? `“${category.name}”` : `#${filters.category_id}`}`);
-    }
-    if (filters.status) {
-      parts.push(`Status ${STATUS_OPTIONS.find((item) => item.value === filters.status)?.label ?? filters.status}`);
-    }
-    if (filters.outcome) {
-      parts.push(`Outcome ${OUTCOME_OPTIONS.find((item) => item.value === filters.outcome)?.label ?? filters.outcome}`);
-    }
-    if (filters.from_date) parts.push(`From ${filters.from_date}`);
-    if (filters.to_date) parts.push(`To ${filters.to_date}`);
-    if (filters.min_score !== undefined) parts.push(`Score ≥ ${filters.min_score}%`);
-    if (filters.max_score !== undefined) parts.push(`Score ≤ ${filters.max_score}%`);
-    return parts.length ? parts.join(' · ') : 'No filters applied — all examination results';
-  }, [filters, options]);
+  const activeDeptName = useMemo(() => {
+    if (!activeRealExam?.department_id) return 'General / University-wide';
+    const found = departmentClusters.find((c) => c.id === activeRealExam.department_id);
+    return found?.name || `Department #${activeRealExam.department_id}`;
+  }, [activeRealExam, departmentClusters]);
 
   const examSummary = examSummaryQuery.data;
   const currentPage = page?.current_page ?? 1;
   const lastPage = page?.last_page ?? 1;
   const totalRecords = page?.total ?? 0;
 
-  // Group rows by department for clustered display
-  const rowsByDepartment = useMemo(() => {
-    const departments: Record<number, AdminResultRow[]> = {};
-    
-    rows.forEach((row) => {
-      const deptId = row.exam.department_id ?? 0;
-      if (!departments[deptId]) {
-        departments[deptId] = [];
-      }
-      departments[deptId].push(row);
-    });
-    
-    return departments;
-  }, [rows]);
-
-  const departmentOptions = useMemo(() => {
-    const allDepts = options?.departments ?? [];
-    // Get unique departments from the filtered results
-    const deptIds = new Set<number>();
-    rows.forEach((row) => {
-      deptIds.add(row.exam.department_id ?? 0);
-    });
-    return allDepts.filter((dept) => deptIds.has(dept.id));
-  }, [options, rows]);
+  const activeFilterCount = [
+    filters.search,
+    filters.status,
+    filters.outcome,
+    filters.from_date,
+    filters.to_date,
+    filters.min_score,
+    filters.max_score,
+  ].filter((v) => v !== undefined && v !== '').length;
 
   return (
     <>
       <div className="print-only report-header">
         <h1>Examination results report</h1>
-        <p>
-          Madda Walabu University · Ofijan ExamFlow · generated {dateLabel(new Date())}
-        </p>
-        <p>{filterSummary}</p>
+        <p>Madda Walabu University · Ofijan ExamFlow · generated {dateLabel(new Date())}</p>
         <p>
           {totalRecords} attempt(s) · {summary ? `${summary.passed_attempts} passed` : '—'} ·{' '}
-          {summary ? `${summary.failed_attempts} failed` : '—'} ·{' '}
-          {summary ? `${summary.pending_evaluation_attempts} pending evaluation` : '—'}
+          {summary ? `${summary.failed_attempts} failed` : '—'}
         </p>
       </div>
 
       <PageTitle
         eyebrow="EXAMINATION OUTCOMES"
         title="Results management"
-        detail="System-wide examination results, computed and verified by the examination server."
+        detail="Department-clustered real examination results and verified student attempts."
         action={
           <div className="hero-actions no-print">
             <Button variant="secondary" onClick={handleExport} disabled={exporting}>
@@ -552,631 +588,630 @@ export function AdminResults() {
         <ErrorBox error={exportError} onRetry={handleExport} retryLabel="Retry export" />
       )}
 
-      {resultsQuery.isPending && <LoadingBlock label="Loading examination results…" />}
-
-      {resultsQuery.isError && (
-        <ErrorBox
-          error={resultsQuery.error}
-          onRetry={() => void resultsQuery.refetch()}
-          retryLabel="Reload"
-        />
-      )}
-
-      {summary && (
-        <div className="dashboard-stats">
-          <div className="admin-stat-card">
-            <div className="admin-stat-header">
-              <div className="admin-stat-icon">
-                <ClipboardList size={18} />
-              </div>
-              <span className="admin-stat-trend neutral">Filtered</span>
-            </div>
-            <div className="admin-stat-value" data-testid="stat-total-attempts">
-              {summary.total_attempts.toLocaleString()}
-            </div>
-            <div className="admin-stat-label">Total attempts</div>
-            <div className="admin-stat-meta">
-              {summary.unique_students.toLocaleString()} student(s) took part
-            </div>
-          </div>
-
-          <div className="admin-stat-card">
-            <div className="admin-stat-header">
-              <div className="admin-stat-icon">
-                <FileCheck2 size={18} />
-              </div>
-              <span className="admin-stat-trend neutral">Finalised</span>
-            </div>
-            <div className="admin-stat-value" data-testid="stat-completed">
-              {summary.completed_attempts.toLocaleString()}
-            </div>
-            <div className="admin-stat-label">Completed attempts</div>
-            <div className="admin-stat-meta">
-              {summary.in_progress_attempts.toLocaleString()} still in progress
-            </div>
-          </div>
-
-          <div className="admin-stat-card">
-            <div className="admin-stat-header">
-              <div className="admin-stat-icon">
-                <Percent size={18} />
-              </div>
-              <span
-                className={`admin-stat-trend ${
-                  summary.pass_rate !== null && summary.pass_rate >= 50 ? 'positive' : 'neutral'
-                }`}
+      {/* =========================================================================
+          LEVEL 2: EXAM SELECTED -> STUDENT ATTEMPTS & DETAILED RESULT ACCESS
+          ========================================================================= */}
+      {selectedExamId ? (
+        <>
+          {/* Breadcrumb Navigation */}
+          <div className="results-breadcrumb-bar no-print">
+            <div className="results-breadcrumb-trail">
+              <Button
+                variant="secondary"
+                onClick={handleBackToExams}
+                data-testid="button-back-to-exams"
               >
-                {summary.graded_outcomes} graded
+                <ChevronLeft size={15} /> Back to Examinations
+              </Button>
+              <span className="results-breadcrumb-separator">/</span>
+              <span>{activeDeptName}</span>
+              <span className="results-breadcrumb-separator">/</span>
+              <strong>
+                {activeRealExam?.exam_title ?? examSummary?.exam.title ?? `Exam #${selectedExamId}`}
+              </strong>
+              <span className="real-exam-pill">
+                <span className="real-exam-pulse-dot" /> Real Exam
               </span>
             </div>
-            <div className="admin-stat-value" data-testid="stat-pass-rate">
-              {percent(summary.pass_rate)}
-            </div>
-            <div className="admin-stat-label">Pass rate</div>
-            <div className="admin-stat-meta">
-              {summary.passed_attempts.toLocaleString()} passed ·{' '}
-              {summary.failed_attempts.toLocaleString()} failed
-            </div>
           </div>
 
-          <div className="admin-stat-card">
-            <div className="admin-stat-header">
-              <div className="admin-stat-icon">
-                <Hourglass size={18} />
+          {/* Exam Summary / KPIs */}
+          {examSummary && (
+            <section className="admin-panel" style={{ marginBottom: 20 }}>
+              <div className="admin-panel-header">
+                <h2>{examSummary.exam.title ?? `Examination #${examSummary.exam.id}`}</h2>
+                <span className="admin-panel-badge">{examSummary.attempts} attempt(s) recorded</span>
               </div>
-              <span className="admin-stat-trend neutral">Review</span>
-            </div>
-            <div className="admin-stat-value" data-testid="stat-pending">
-              {summary.pending_evaluation_attempts.toLocaleString()}
-            </div>
-            <div className="admin-stat-label">Pending evaluation</div>
-            <div className="admin-stat-meta">
-              Average score {percent(summary.average_score)}
-            </div>
-          </div>
-        </div>
-      )}
+              <div className="admin-panel-body">
+                <div className="exam-summary-metrics">
+                  <div>
+                    <small>Assigned students</small>
+                    <strong>{examSummary.assigned_students}</strong>
+                  </div>
+                  <div>
+                    <small>Started</small>
+                    <strong>{examSummary.students_started}</strong>
+                  </div>
+                  <div>
+                    <small>Not attempted</small>
+                    <strong>{examSummary.students_not_attempted}</strong>
+                  </div>
+                  <div>
+                    <small>Pass rate</small>
+                    <strong>{percent(examSummary.pass_rate)}</strong>
+                  </div>
+                  <div>
+                    <small>Average score</small>
+                    <strong>{percent(examSummary.average_score)}</strong>
+                  </div>
+                  <div>
+                    <small>Pass mark</small>
+                    <strong>
+                      {examSummary.exam.passing_percentage !== null
+                        ? `${examSummary.exam.passing_percentage}%`
+                        : '—'}
+                    </strong>
+                  </div>
+                </div>
+                {examSummary.score_distribution && examSummary.score_distribution.length > 0 && (
+                  <div style={{ marginTop: 16 }}>
+                    <div className="eyebrow">SCORE DISTRIBUTION</div>
+                    <ScoreDistribution buckets={examSummary.score_distribution} />
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
 
-      {/* Filter section - Only show when viewing results (exam selected) */}
-      {filters.exam_id !== undefined && (
-        <section className="admin-panel no-print" style={{ marginTop: 16 }}>
-          <div className="admin-panel-header">
-            <h2>Filters</h2>
-            {activeFilterCount > 0 && (
-              <button type="button" className="text-link" onClick={clearFilters}>
-                <RotateCcw size={13} /> Clear all ({activeFilterCount})
-              </button>
-            )}
-          </div>
-          <div className="admin-panel-body">
-            <div className="results-filters">
-            <div className="filter-field filter-field-wide">
-              <label htmlFor="filter-search">Search</label>
-              <div className="search-box">
-                <input
-                  id="filter-search"
-                  type="search"
-                  placeholder="Student, email, exam or attempt #"
-                  value={searchInput}
-                  onChange={(event) => setSearchInput(event.target.value)}
-                />
-                <span>
-                  <Search size={15} />
-                </span>
+          {/* Filters for this Exam's Student Attempts */}
+          <section className="admin-panel no-print" style={{ marginBottom: 20 }}>
+            <div className="admin-panel-header">
+              <h2>Student Attempts Filters</h2>
+              {activeFilterCount > 0 && (
+                <button type="button" className="text-link" onClick={clearAttemptFilters}>
+                  <RotateCcw size={13} /> Clear filters ({activeFilterCount})
+                </button>
+              )}
+            </div>
+            <div className="admin-panel-body">
+              <div className="results-filters">
+                <div className="filter-field filter-field-wide">
+                  <label htmlFor="filter-search-student">Search student</label>
+                  <div className="search-box">
+                    <input
+                      id="filter-search-student"
+                      type="search"
+                      placeholder="Student name, email or attempt #"
+                      value={searchInput}
+                      onChange={(event) => setSearchInput(event.target.value)}
+                    />
+                    <span>
+                      <Search size={15} />
+                    </span>
+                  </div>
+                </div>
+
+                <div className="filter-field">
+                  <label htmlFor="filter-status">Attempt status</label>
+                  <select
+                    id="filter-status"
+                    value={filters.status ?? ''}
+                    onChange={(event) => updateParam('status', event.target.value || undefined)}
+                  >
+                    {STATUS_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="filter-field">
+                  <label htmlFor="filter-outcome">Outcome</label>
+                  <select
+                    id="filter-outcome"
+                    value={filters.outcome ?? ''}
+                    onChange={(event) => updateParam('outcome', event.target.value || undefined)}
+                  >
+                    {OUTCOME_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="filter-field">
+                  <label htmlFor="filter-min-score">Min score (%)</label>
+                  <input
+                    id="filter-min-score"
+                    type="number"
+                    min={0}
+                    max={100}
+                    placeholder="0"
+                    value={filters.min_score ?? ''}
+                    onChange={(event) => updateParam('min_score', event.target.value || undefined)}
+                  />
+                </div>
+
+                <div className="filter-field">
+                  <label htmlFor="filter-max-score">Max score (%)</label>
+                  <input
+                    id="filter-max-score"
+                    type="number"
+                    min={0}
+                    max={100}
+                    placeholder="100"
+                    value={filters.max_score ?? ''}
+                    onChange={(event) => updateParam('max_score', event.target.value || undefined)}
+                  />
+                </div>
               </div>
             </div>
+          </section>
 
-            <div className="filter-field">
-              <label htmlFor="filter-exam">Examination</label>
-              <select
-                id="filter-exam"
-                value={filters.exam_id ?? ''}
-                onChange={(event) =>
-                  updateParam('exam_id', event.target.value || undefined)
-                }
-              >
-                <option value="">All examinations</option>
-                {examFilterOptions.map((exam) => (
-                  <option key={exam.id} value={exam.id}>
-                    {exam.title}
-                  </option>
-                ))}
-              </select>
+          {/* Student Attempts Table */}
+          <section className="admin-panel" style={{ marginTop: 16 }}>
+            <div className="admin-panel-header">
+              <h2>Student Attempts</h2>
+              <span className="admin-panel-badge">
+                {totalRecords.toLocaleString()} student attempt(s)
+              </span>
             </div>
 
-            <div className="filter-field">
-              <label htmlFor="filter-department">Department</label>
-              <select
-                id="filter-department"
-                value={filters.department_id ?? ''}
-                onChange={(event) =>
-                  updateParam('department_id', event.target.value || undefined)
-                }
-              >
-                <option value="">All departments</option>
-                {(options?.departments ?? []).map((department) => (
-                  <option key={department.id} value={department.id}>
-                    {department.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="filter-field">
-              <label htmlFor="filter-category">Category</label>
-              <select
-                id="filter-category"
-                value={filters.category_id ?? ''}
-                onChange={(event) =>
-                  updateParam('category_id', event.target.value || undefined)
-                }
-              >
-                <option value="">All categories</option>
-                {(options?.categories ?? []).map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="filter-field">
-              <label htmlFor="filter-status">Attempt status</label>
-              <select
-                id="filter-status"
-                value={filters.status ?? ''}
-                onChange={(event) => updateParam('status', event.target.value || undefined)}
-              >
-                {STATUS_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="filter-field">
-              <label htmlFor="filter-outcome">Outcome</label>
-              <select
-                id="filter-outcome"
-                value={filters.outcome ?? ''}
-                onChange={(event) => updateParam('outcome', event.target.value || undefined)}
-              >
-                {OUTCOME_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="filter-field">
-              <label htmlFor="filter-from">Started from</label>
-              <input
-                id="filter-from"
-                type="date"
-                value={filters.from_date ?? ''}
-                onChange={(event) => updateParam('from_date', event.target.value || undefined)}
+            {resultsQuery.isPending ? (
+              <LoadingBlock label="Loading student attempts…" />
+            ) : resultsQuery.isError ? (
+              <ErrorBox
+                error={resultsQuery.error}
+                onRetry={() => void resultsQuery.refetch()}
+                retryLabel="Reload"
               />
-            </div>
-
-            <div className="filter-field">
-              <label htmlFor="filter-to">Started until</label>
-              <input
-                id="filter-to"
-                type="date"
-                value={filters.to_date ?? ''}
-                onChange={(event) => updateParam('to_date', event.target.value || undefined)}
-              />
-            </div>
-
-            <div className="filter-field">
-              <label htmlFor="filter-min-score">Minimum score (%)</label>
-              <input
-                id="filter-min-score"
-                type="number"
-                min={0}
-                max={100}
-                step={0.01}
-                placeholder="0"
-                value={filters.min_score ?? ''}
-                onChange={(event) => updateParam('min_score', event.target.value || undefined)}
-              />
-            </div>
-
-            <div className="filter-field">
-              <label htmlFor="filter-max-score">Maximum score (%)</label>
-              <input
-                id="filter-max-score"
-                type="number"
-                min={0}
-                max={100}
-                step={0.01}
-                placeholder="100"
-                value={filters.max_score ?? ''}
-                onChange={(event) => updateParam('max_score', event.target.value || undefined)}
-              />
-            </div>
-          </div>
-        </div>
-      </section>
-      )}
-
-      {/* Exam List View - Only show when no exam is selected */}
-      {!selectedExamId && !filters.exam_id && (
-        <section className="admin-panel" style={{ marginTop: 16 }}>
-          <div className="admin-panel-header">
-            <h2>Examinations created by teachers</h2>
-            <span className="admin-panel-badge">{totalExams} exam(s)</span>
-          </div>
-          <div className="admin-panel-body">
-            {examsQuery.isPending || teachersQuery.isPending ? (
-              <LoadingBlock label="Loading examinations…" />
-            ) : paginatedExams.length === 0 ? (
+            ) : rows.length === 0 ? (
               <EmptyState
-                icon={<BookOpen size={23} />}
-                title="No teacher-created examinations"
-                description="Examinations appear here once a teacher creates one."
+                icon={<Users size={28} />}
+                title="No student attempts recorded"
+                description={`No students have attempted this examination yet${
+                  activeFilterCount > 0 ? ' matching your filters' : ''
+                }.`}
               />
             ) : (
-              <>
-                <div className="table-wrap">
-                  <table className="admin-table">
-                    <thead>
-                      <tr>
-                        <th>Examination</th>
-                        <th>Department</th>
-                        <th>Category</th>
-                        <th>Duration</th>
-                        <th>Status</th>
-                        <th>Attempts</th>
-                        <th />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {paginatedExams.map((exam) => (
+              <div className="table-wrap">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <SortableHeader
+                        label="Student"
+                        column="student"
+                        filters={filters}
+                        onSort={toggleSort}
+                      />
+                      <th>Status</th>
+                      <SortableHeader
+                        label="Total Marks"
+                        column="score"
+                        filters={filters}
+                        onSort={toggleSort}
+                      />
+                      <th>Score</th>
+                      <th>Correct</th>
+                      <th>Outcome</th>
+                      <th>Grading</th>
+                      <SortableHeader
+                        label="Started"
+                        column="started_at"
+                        filters={filters}
+                        onSort={toggleSort}
+                      />
+                      <SortableHeader
+                        label="Submitted"
+                        column="completed_at"
+                        filters={filters}
+                        onSort={toggleSort}
+                      />
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row) => (
+                      <Fragment key={row.id}>
                         <tr
-                          key={exam.id}
-                          style={{ cursor: 'pointer' }}
-                          onClick={() => handleExamClick(exam.id)}
-                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--hover-bg, #f8fafc)'}
-                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                          data-testid={`row-result-${row.id}`}
+                          className="student-table-row"
                         >
                           <td>
-                            <strong>{exam.exam_title ?? `Exam #${exam.id}`}</strong>
-                            <small>{exam.description || 'No description'}</small>
-                          </td>
-                          <td>
-                            <span style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '0.5rem',
-                              padding: '0.25rem 0.75rem',
-                              background: 'var(--badge-bg, #f1f5f9)',
-                              borderRadius: '9999px',
-                              fontSize: '0.85rem',
-                            }}>
-                              {options?.departments.find((dept) => dept.id === exam.department_id)?.name || `Dept #${exam.department_id ?? '—'}`}
-                            </span>
-                          </td>
-                          <td>
-                            <small>{exam.category?.name || '—'}</small>
-                          </td>
-                          <td>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                              <Clock size={14} style={{ color: 'var(--text-muted)' }} />
-                              {exam.total_time ? `${exam.total_time} min` : '—'}
+                            <div className="user-cell">
+                              <div className="user-avatar">
+                                {(row.student.name ?? '?').charAt(0).toUpperCase()}
+                              </div>
+                              <div className="user-info">
+                                <Link
+                                  href={`/admin/results/${row.id}`}
+                                  className="student-clickable-name"
+                                  data-testid={`link-student-name-${row.id}`}
+                                  title="Click to view full detail result"
+                                >
+                                  {row.student.name ?? `Student #${row.student.id}`}
+                                </Link>
+                                <small>
+                                  {row.student.email ?? `ID ${row.student.id}`}
+                                  {row.student.department_name
+                                    ? ` · ${row.student.department_name}`
+                                    : ''}
+                                </small>
+                              </div>
                             </div>
                           </td>
                           <td>
-                            <Status
-                              tone={
-                                exam.lifecycle_status === 'completed' ? 'green' :
-                                exam.lifecycle_status === 'started' || exam.lifecycle_status === 'running' ? 'amber' :
-                                exam.lifecycle_status === 'ready' || exam.lifecycle_status === 'published' ? 'blue' :
-                                'neutral'
-                              }
-                            >
-                              {exam.lifecycle_status?.toUpperCase() || 'DRAFT'}
+                            <strong>
+                              {ATTEMPT_STATUS_LABEL[row.status ?? ''] ?? (row.status ?? '—')}
+                            </strong>
+                            <small>
+                              Attempt #{row.id}
+                              {row.auto_submitted ? ' · auto-submitted' : ''}
+                            </small>
+                          </td>
+                          <td className="num" data-testid={`marks-${row.id}`}>
+                            <strong>{row.max_marks !== null ? row.max_marks : '—'}</strong>
+                          </td>
+                          <td className="num" data-testid={`score-${row.id}`}>
+                            <strong>
+                              {row.marks_obtained != null && row.max_marks != null
+                                ? `${row.marks_obtained} / ${row.max_marks}`
+                                : '—'}
+                            </strong>
+                          </td>
+                          <td className="num" data-testid={`correct-${row.id}`}>
+                            <strong>
+                              {row.correct_answers != null && row.total_questions != null
+                                ? `${row.correct_answers} / ${row.total_questions}`
+                                : '—'}
+                            </strong>
+                          </td>
+                          <td>
+                            <Status tone={outcomeTone(row)} testId={`outcome-${row.id}`}>
+                              {outcomeLabel(row)}
                             </Status>
+                            <small className="muted">Pass mark {row.pass_mark}%</small>
                           </td>
                           <td>
-                            <strong>{exam.assigned_count ?? exam.assigned_students?.length ?? 0}</strong>
-                            <small>assigned</small>
+                            <Status tone={gradingTone(row)}>{gradingLabel(row)}</Status>
                           </td>
+                          <td>{dateLabel(row.start_time)}</td>
+                          <td>{dateLabel(row.completed_at ?? row.end_time)}</td>
                           <td>
-                            <ChevronRight size={16} style={{ color: 'var(--text-muted)' }} />
+                            <div className="action-buttons">
+                              <button
+                                type="button"
+                                className="text-link"
+                                aria-expanded={expandedAttemptId === row.id}
+                                onClick={() =>
+                                  setExpandedAttemptId((prev) => (prev === row.id ? null : row.id))
+                                }
+                                data-testid={`button-questions-${row.id}`}
+                              >
+                                <ListChecks size={14} />
+                                {expandedAttemptId === row.id ? 'Hide' : 'Questions'}
+                              </button>
+                              <Link
+                                href={`/admin/results/${row.id}`}
+                                className="button button-secondary"
+                                style={{ padding: '4px 10px', fontSize: '12px' }}
+                                data-testid={`link-result-${row.id}`}
+                              >
+                                Detail Result <ChevronRight size={13} />
+                              </Link>
+                            </div>
                           </td>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                        {expandedAttemptId === row.id && (
+                          <tr
+                            className="attempt-questions-row"
+                            data-testid={`questions-row-${row.id}`}
+                          >
+                            <td colSpan={10}>
+                              <AttemptQuestions attemptId={row.id} />
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
-                {/* Exam Pagination */}
-                {examLastPage > 1 && (
-                  <div className="pagination-row" style={{ marginTop: '1rem' }}>
-                    <span>
-                      Page {currentExamPage} of {examLastPage} · {totalExams} exam(s)
-                    </span>
-                    <div className="pagination-controls">
-                      <Button
-                        variant="secondary"
-                        disabled={currentExamPage <= 1}
-                        onClick={() => setExamPage(currentExamPage - 1)}
-                      >
-                        <ChevronLeft size={14} /> Previous
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        disabled={currentExamPage >= examLastPage}
-                        onClick={() => setExamPage(currentExamPage + 1)}
-                      >
-                        Next <ChevronRight size={14} />
-                      </Button>
+            {!resultsQuery.isPending && rows.length > 0 && (
+              <div className="admin-panel-body">
+                <div className="pagination-row">
+                  <span>
+                    Page {currentPage} of {lastPage} · {totalRecords.toLocaleString()} record(s)
+                  </span>
+                  <div className="pagination-controls">
+                    <select
+                      aria-label="Records per page"
+                      className="per-page-select"
+                      value={filters.per_page}
+                      onChange={(event) => updateParam('per_page', event.target.value)}
+                    >
+                      {PER_PAGE_OPTIONS.map((size) => (
+                        <option key={size} value={size}>
+                          {size} per page
+                        </option>
+                      ))}
+                    </select>
+                    <Button
+                      variant="secondary"
+                      disabled={currentPage <= 1}
+                      onClick={() => updateParam('page', String(currentPage - 1))}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      disabled={currentPage >= lastPage}
+                      onClick={() => updateParam('page', String(currentPage + 1))}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+        </>
+      ) : (
+        /* =========================================================================
+           LEVEL 1: CLUSTERED BY DEPARTMENT -> REAL EXAM CARDS
+           ========================================================================= */
+        <>
+          {/* Top Overview KPI Cards */}
+          <div className="dashboard-stats" style={{ marginBottom: 24 }}>
+            <div className="admin-stat-card">
+              <div className="admin-stat-header">
+                <div className="admin-stat-icon">
+                  <FileText size={18} />
+                </div>
+                <span className="admin-stat-trend positive">Governed</span>
+              </div>
+              <div className="admin-stat-value" data-testid="stat-real-exams">
+                {realExams.length.toLocaleString()}
+              </div>
+              <div className="admin-stat-label">Real Examinations</div>
+              <div className="admin-stat-meta">Authoritative official exams</div>
+            </div>
+
+            <div className="admin-stat-card">
+              <div className="admin-stat-header">
+                <div className="admin-stat-icon">
+                  <Building2 size={18} />
+                </div>
+                <span className="admin-stat-trend neutral">Clustered</span>
+              </div>
+              <div className="admin-stat-value" data-testid="stat-dept-clusters">
+                {departmentClusters.length.toLocaleString()}
+              </div>
+              <div className="admin-stat-label">Academic Departments</div>
+              <div className="admin-stat-meta">Grouped curriculum units</div>
+            </div>
+
+            <div className="admin-stat-card">
+              <div className="admin-stat-header">
+                <div className="admin-stat-icon">
+                  <ClipboardList size={18} />
+                </div>
+                <span className="admin-stat-trend neutral">Recorded</span>
+              </div>
+              <div className="admin-stat-value" data-testid="stat-total-attempts">
+                {(summary?.total_attempts ?? 0).toLocaleString()}
+              </div>
+              <div className="admin-stat-label">Total Student Attempts</div>
+              <div className="admin-stat-meta">
+                {(summary?.completed_attempts ?? 0).toLocaleString()} completed
+              </div>
+            </div>
+
+            <div className="admin-stat-card">
+              <div className="admin-stat-header">
+                <div className="admin-stat-icon">
+                  <Percent size={18} />
+                </div>
+                <span className="admin-stat-trend positive">Outcome</span>
+              </div>
+              <div className="admin-stat-value" data-testid="stat-pass-rate">
+                {percent(summary?.pass_rate)}
+              </div>
+              <div className="admin-stat-label">System Pass Rate</div>
+              <div className="admin-stat-meta">
+                {(summary?.passed_attempts ?? 0).toLocaleString()} passed
+              </div>
+            </div>
+          </div>
+
+          {/* Department Filter & Search Bar */}
+          <div className="dept-filter-bar no-print">
+            <div className="dept-pills-nav" role="tablist" aria-label="Department Clusters">
+              <button
+                type="button"
+                className={`dept-pill-btn ${selectedDepartmentId === null ? 'active' : ''}`}
+                onClick={() => setSelectedDepartmentId(null)}
+                data-testid="tab-all-departments"
+              >
+                <Building2 size={14} />
+                <span>All Departments</span>
+                <span className="dept-pill-badge">{realExams.length}</span>
+              </button>
+              {departmentClusters.map((cluster) => (
+                <button
+                  key={cluster.id}
+                  type="button"
+                  className={`dept-pill-btn ${selectedDepartmentId === cluster.id ? 'active' : ''}`}
+                  onClick={() => setSelectedDepartmentId(cluster.id)}
+                  data-testid={`tab-dept-${cluster.id}`}
+                >
+                  <GraduationCap size={14} />
+                  <span>{cluster.name}</span>
+                  <span className="dept-pill-badge">{cluster.exams.length}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="search-box" style={{ minWidth: 260 }}>
+              <input
+                type="search"
+                placeholder="Search real exams by title or category…"
+                value={examSearch}
+                onChange={(e) => setExamSearch(e.target.value)}
+                data-testid="input-search-real-exams"
+              />
+              <span>
+                <Search size={15} />
+              </span>
+            </div>
+          </div>
+
+          {/* Department Clusters with Real Exam Cards */}
+          {realExamsQuery.isPending || departmentsQuery.isPending ? (
+            <LoadingBlock label="Loading real examinations clustered by department…" />
+          ) : realExamsQuery.isError ? (
+            <ErrorBox
+              error={realExamsQuery.error}
+              onRetry={() => void realExamsQuery.refetch()}
+              retryLabel="Reload examinations"
+            />
+          ) : visibleClusters.length === 0 ? (
+            <EmptyState
+              icon={<BookOpen size={30} />}
+              title="No real examinations found"
+              description={
+                examSearch
+                  ? `No real examinations match "${examSearch}". Try clearing the search filter.`
+                  : 'No real examinations are registered in the system yet.'
+              }
+            />
+          ) : (
+            visibleClusters.map((cluster) => (
+              <section
+                key={cluster.id}
+                className="dept-cluster-section"
+                data-testid={`dept-cluster-${cluster.id}`}
+              >
+                <div className="dept-cluster-header">
+                  <div className="dept-cluster-title-wrap">
+                    <div className="dept-cluster-icon">
+                      <GraduationCap size={22} />
+                    </div>
+                    <div>
+                      <h3>{cluster.name}</h3>
+                      <p>Official examinations administered under this academic department</p>
                     </div>
                   </div>
-                )}
-              </>
-            )}
-          </div>
-        </section>
-      )}
+                  <div className="dept-cluster-badges">
+                    <span className="dept-badge-pill">
+                      <FileText size={13} /> {cluster.exams.length} Real Exam
+                      {cluster.exams.length === 1 ? '' : 's'}
+                    </span>
+                    <span className="dept-badge-pill">
+                      <Users size={13} /> {cluster.totalAttempts} Attempt
+                      {cluster.totalAttempts === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                </div>
 
-      {/* Exam Summary - Show when exam is selected */}
-      {filters.exam_id !== undefined && examSummary && (
-        <>
-          <Button
-            variant="secondary"
-            onClick={handleBackToExams}
-            className="back-button"
-          >
-            <ChevronLeft size={14} /> Back to Examinations List
-          </Button>
-
-          <section className="admin-panel" style={{ marginTop: 16 }}>
-            <div className="admin-panel-header">
-              <h2>{examSummary.exam.title ?? `Examination #${examSummary.exam.id}`}</h2>
-              <span className="admin-panel-badge">{examSummary.attempts} attempt(s)</span>
-            </div>
-          <div className="admin-panel-body">
-            <div className="exam-summary-metrics">
-              <div>
-                <small>Assigned students</small>
-                <strong>{examSummary.assigned_students}</strong>
-              </div>
-              <div>
-                <small>Started</small>
-                <strong>{examSummary.students_started}</strong>
-              </div>
-              <div>
-                <small>Not attempted</small>
-                <strong>{examSummary.students_not_attempted}</strong>
-              </div>
-              <div>
-                <small>Pass rate</small>
-                <strong>{percent(examSummary.pass_rate)}</strong>
-              </div>
-              <div>
-                <small>Average score</small>
-                <strong>{percent(examSummary.average_score)}</strong>
-              </div>
-              <div>
-                <small>Pass mark</small>
-                <strong>
-                  {examSummary.exam.passing_percentage !== null
-                    ? `${examSummary.exam.passing_percentage}%`
-                    : '—'}
-                </strong>
-              </div>
-            </div>
-            <div>
-              <div className="eyebrow">SCORE DISTRIBUTION</div>
-              <ScoreDistribution buckets={examSummary.score_distribution} />
-            </div>
-          </div>
-        </section>
-      </>
-      )}
-
-      <section className="admin-panel" style={{ marginTop: 16 }}>
-        <div className="admin-panel-header">
-          <h2>Results</h2>
-          <span className="admin-panel-badge">
-            {totalRecords.toLocaleString()} record(s)
-          </span>
-        </div>
-
-        {resultsQuery.isPending ? null : rows.length === 0 ? (
-          <EmptyState
-            icon={<FileCheck2 size={23} />}
-            title="No results match these filters"
-            description="Adjust or clear the filters to see the examination attempts recorded by the server."
-          />
-        ) : (
-          <div className="table-wrap">
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <SortableHeader
-                    label="Student"
-                    column="student"
-                    filters={filters}
-                    onSort={toggleSort}
-                  />
-                  <SortableHeader
-                    label="Examination"
-                    column="exam"
-                    filters={filters}
-                    onSort={toggleSort}
-                  />
-                  <th>Status</th>
-                  <SortableHeader label="Marks" column="score" filters={filters} onSort={toggleSort} />
-                  <th>Score</th>
-                  <th>Correct</th>
-                  <th>Outcome</th>
-                  <th>Grading</th>
-                  <SortableHeader
-                    label="Started"
-                    column="started_at"
-                    filters={filters}
-                    onSort={toggleSort}
-                  />
-                  <SortableHeader
-                    label="Submitted"
-                    column="completed_at"
-                    filters={filters}
-                    onSort={toggleSort}
-                  />
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <Fragment key={row.id}>
-                  <tr data-testid={`row-result-${row.id}`}>
-                    <td>
-                      <div className="user-cell">
-                        <div className="user-avatar">
-                          {(row.student.name ?? '?').charAt(0).toUpperCase()}
-                        </div>
-                        <div className="user-info">
-                          <strong>{row.student.name ?? `Student #${row.student.id}`}</strong>
-                          <small>
-                            {row.student.email ?? `ID ${row.student.id}`}
-                            {row.student.department_name
-                              ? ` · ${row.student.department_name}`
-                              : ''}
-                          </small>
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      <strong>{row.exam.title ?? `Examination #${row.exam.id}`}</strong>
-                      <small>
-                        {row.exam.category_name ?? '—'}
-                        {row.exam.department_name ? ` · ${row.exam.department_name}` : ''}
-                      </small>
-                    </td>
-                    <td>
-                      <strong>
-                        {ATTEMPT_STATUS_LABEL[row.status ?? ''] ?? (row.status ?? '—')}
-                      </strong>
-                      <small>
-                        Attempt #{row.id}
-                        {row.auto_submitted ? ' · auto-submitted' : ''}
-                        {row.attempt_state ? ` · ${row.attempt_state}` : ''}
-                      </small>
-                    </td>
-                    <td className="num" data-testid={`marks-${row.id}`}>
-                      <strong>{row.max_marks !== null ? row.max_marks : '—'}</strong>
-                    </td>
-                    <td className="num" data-testid={`score-${row.id}`}>
-                      <strong>
-                        {row.marks_obtained != null && row.max_marks != null
-                          ? `${row.marks_obtained} / ${row.max_marks}`
-                          : '—'}
-                      </strong>
-                    </td>
-                    <td className="num" data-testid={`correct-${row.id}`}>
-                      <strong>
-                        {row.correct_answers != null && row.total_questions != null
-                          ? `${row.correct_answers} / ${row.total_questions}`
-                          : '—'}
-                      </strong>
-                    </td>
-                    <td>
-                      <Status tone={outcomeTone(row)} testId={`outcome-${row.id}`}>
-                        {outcomeLabel(row)}
-                      </Status>
-                      <small className="muted">Pass mark {row.pass_mark}%</small>
-                    </td>
-                    <td>
-                      <Status tone={gradingTone(row)}>{gradingLabel(row)}</Status>
-                    </td>
-                    <td>{dateLabel(row.start_time)}</td>
-                    <td>{dateLabel(row.completed_at ?? row.end_time)}</td>
-                    <td>
-                      <div className="action-buttons">
-                        <button
-                          type="button"
-                          className="text-link"
-                          aria-expanded={expandedAttemptId === row.id}
-                          onClick={() =>
-                            setExpandedAttemptId((prev) => (prev === row.id ? null : row.id))
-                          }
-                          data-testid={`button-questions-${row.id}`}
-                        >
-                          <ListChecks size={14} />
-                          {expandedAttemptId === row.id ? 'Hide' : 'Questions'}
-                        </button>
-                        <Link
-                          href={`/admin/results/${row.id}`}
-                          className="text-link"
-                          data-testid={`link-result-${row.id}`}
-                        >
-                          Review <ChevronRight size={14} />
-                        </Link>
-                      </div>
-                    </td>
-                  </tr>
-                  {expandedAttemptId === row.id && (
-                    <tr
-                      className="attempt-questions-row"
-                      data-testid={`questions-row-${row.id}`}
+                <div className="real-exams-grid">
+                  {cluster.exams.map((exam) => (
+                    <div
+                      key={exam.id}
+                      className="real-exam-card"
+                      onClick={() => handleExamClick(exam)}
+                      data-testid={`card-real-exam-${exam.id}`}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleExamClick(exam);
+                        }
+                      }}
                     >
-                      <td colSpan={11}>
-                        <AttemptQuestions attemptId={row.id} />
-                      </td>
-                    </tr>
-                  )}
-                  </Fragment>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                      <div className="real-exam-card-head">
+                        <span className="real-exam-pill">
+                          <span className="real-exam-pulse-dot" /> Real Exam
+                        </span>
+                        <Status
+                          tone={
+                            exam.lifecycle_status === 'completed'
+                              ? 'green'
+                              : exam.lifecycle_status === 'started' ||
+                                  exam.lifecycle_status === 'running'
+                                ? 'amber'
+                                : exam.lifecycle_status === 'ready' ||
+                                    exam.lifecycle_status === 'published'
+                                  ? 'blue'
+                                  : 'neutral'
+                          }
+                        >
+                          {exam.lifecycle_status?.toUpperCase() || 'DRAFT'}
+                        </Status>
+                      </div>
 
-        {!resultsQuery.isPending && rows.length > 0 && (
-          <div className="admin-panel-body">
-            <div className="pagination-row">
-              <span>
-                Page {currentPage} of {lastPage} · {totalRecords.toLocaleString()} record(s)
-              </span>
-              <div className="pagination-controls">
-                <select
-                  aria-label="Records per page"
-                  className="per-page-select"
-                  value={filters.per_page}
-                  onChange={(event) => updateParam('per_page', event.target.value)}
-                >
-                  {PER_PAGE_OPTIONS.map((size) => (
-                    <option key={size} value={size}>
-                      {size} per page
-                    </option>
+                      <div className="eyebrow" style={{ marginBottom: 4 }}>
+                        {exam.category?.name || 'Academic Assessment'}
+                      </div>
+
+                      <h4>{exam.exam_title ?? `Examination #${exam.id}`}</h4>
+
+                      <p className="real-exam-card-desc">
+                        {exam.description || 'No detailed instructions or syllabus note provided.'}
+                      </p>
+
+                      <div className="real-exam-meta-grid">
+                        <div className="real-exam-meta-item">
+                          <span className="real-exam-meta-label">
+                            <Clock size={11} /> Duration
+                          </span>
+                          <span className="real-exam-meta-val">
+                            {exam.total_time ? `${exam.total_time} min` : '—'}
+                          </span>
+                        </div>
+                        <div className="real-exam-meta-item">
+                          <span className="real-exam-meta-label">
+                            <CheckCircle2 size={11} /> Pass Mark
+                          </span>
+                          <span className="real-exam-meta-val">
+                            {exam.passing_percentage != null ? `${exam.passing_percentage}%` : '50%'}
+                          </span>
+                        </div>
+                        <div className="real-exam-meta-item">
+                          <span className="real-exam-meta-label">
+                            <FileText size={11} /> Questions
+                          </span>
+                          <span className="real-exam-meta-val">
+                            {exam.questions_count ?? '—'} Qs
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="real-exam-card-foot">
+                        <span>
+                          <strong>{exam.completed_attempts ?? 0}</strong> completed ·{' '}
+                          <strong>{exam.assigned_count ?? exam.assigned_students?.length ?? 0}</strong>{' '}
+                          assigned
+                        </span>
+                        <span className="real-exam-cta-btn">
+                          View Attempts <ChevronRight size={14} />
+                        </span>
+                      </div>
+                    </div>
                   ))}
-                </select>
-                <Button
-                  variant="secondary"
-                  disabled={currentPage <= 1}
-                  onClick={() => updateParam('page', String(currentPage - 1))}
-                >
-                  Previous
-                </Button>
-                <Button
-                  variant="secondary"
-                  disabled={currentPage >= lastPage}
-                  onClick={() => updateParam('page', String(currentPage + 1))}
-                >
-                  Next
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-      </section>
+                </div>
+              </section>
+            ))
+          )}
+        </>
+      )}
 
-      <div className="bottom-note no-print">
+      <div className="bottom-note no-print" style={{ marginTop: 24 }}>
         <BarChart3 size={17} />
         <span>
           Marks, percentages, pass marks and outcomes are calculated by the examination server.
