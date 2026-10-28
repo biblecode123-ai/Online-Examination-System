@@ -191,7 +191,7 @@ export function AdminUsers() {
                 <Filter size={14} className="filter-icon" />
                 <select
                   value={departmentFilter ?? ''}
-                  onChange={(e) => setDepartmentFilter(e.target.value ? Number(e.target.value) : null)}
+                  onChange={(e) => { setDepartmentFilter(e.target.value ? Number(e.target.value) : null); setPage(1); }}
                   className="filter-select"
                   disabled={departmentsLoading || departmentsError != null}
                   title={departmentsError ? 'Failed to load departments' : undefined}
