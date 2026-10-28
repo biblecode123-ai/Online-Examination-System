@@ -130,7 +130,7 @@ export function AdminResultDetail() {
   // results tab (they have no system-wide list).
   const backHref = isTeacherView
     ? `/teacher/exams/${result.exam.id}?tab=results`
-    : '/admin/results';
+    : `/admin/results?exam_id=${result.exam.id}`;
 
   // §5.1 — summary counts derived from the same per-question records the
   // review list renders, so the summary can never disagree with the detail.
