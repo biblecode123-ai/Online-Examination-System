@@ -13,6 +13,7 @@ import type {
   AdminQuestionRow,
   AdminRealExam,
   AdminRealExamSettings,
+  AutosaveSettings,
   AdminResultDetail,
   AdminResultsFilters,
   AdminResultsOptions,
@@ -759,6 +760,159 @@ export const adminApi = {
   /** DELETE /departments/{id} — delete a department. */
   async deleteDepartment(id: number): Promise<void> {
     await apiRequest(`/v1/departments/${id}`, { method: 'DELETE' });
+  },
+
+  /** GET /v1/admin/autosave-settings — list or get autosave settings. */
+  async listAutosaveSettings(signal?: AbortSignal): Promise<AutosaveSettings[]> {
+    return autosaveApi.list(signal);
+  },
+
+  /** POST or PUT /v1/admin/autosave-settings — save autosave configuration. */
+  async saveAutosaveSettings(settings: Partial<AutosaveSettings>): Promise<AutosaveSettings> {
+    return autosaveApi.save(settings);
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Autosave & Recovery Configuration API
+// ---------------------------------------------------------------------------
+
+export const DEFAULT_AUTOSAVE_SETTINGS: AutosaveSettings = {
+  scope: 'global',
+  scope_id: null,
+  time_based_enabled: true,
+  time_interval_seconds: 30, // 30 seconds default
+  answer_count_enabled: true,
+  answer_count_threshold: 5, // 5 changed answers default
+  max_batch_size: 25, // 25 answers per batch default
+  max_concurrent_requests: 1,
+  min_sync_interval_seconds: 10,
+  retry_max_attempts: 5,
+  retry_initial_delay_ms: 5000, // 5 seconds default
+  retry_max_delay_ms: 30000,
+  local_essay_debounce_seconds: 3, // 3 seconds essay debounce default
+  offline_recovery_enabled: true, // Enabled default
+  active: true, // Automatic answer synchronization enabled
+};
+
+const LOCAL_AUTOSAVE_KEY = 'ofijan.autosave_settings.v1';
+
+export const autosaveApi = {
+  /** Read from local cache as persistent fallback */
+  readLocal(scope: 'global' | 'exam' = 'global', scopeId?: number | null): AutosaveSettings | null {
+    try {
+      const raw = localStorage.getItem(`${LOCAL_AUTOSAVE_KEY}.${scope}${scopeId ? `.${scopeId}` : ''}`);
+      if (raw) return JSON.parse(raw);
+      if (scope === 'exam') {
+        const globalRaw = localStorage.getItem(`${LOCAL_AUTOSAVE_KEY}.global`);
+        if (globalRaw) return JSON.parse(globalRaw);
+      }
+    } catch {
+      /* ignore storage errors */
+    }
+    return null;
+  },
+
+  /** Write to local cache */
+  writeLocal(settings: AutosaveSettings): void {
+    try {
+      const key = `${LOCAL_AUTOSAVE_KEY}.${settings.scope}${settings.scope_id ? `.${settings.scope_id}` : ''}`;
+      localStorage.setItem(key, JSON.stringify(settings));
+    } catch {
+      /* ignore storage errors */
+    }
+  },
+
+  /** GET /v1/admin/autosave-settings — list all settings */
+  async list(signal?: AbortSignal): Promise<AutosaveSettings[]> {
+    try {
+      const res = await apiRequest<{ settings?: AutosaveSettings[] } | AutosaveSettings[]>(
+        '/v1/admin/autosave-settings',
+        { signal },
+      );
+      let items: AutosaveSettings[] = [];
+      if (Array.isArray(res)) {
+        items = res;
+      } else if (res && Array.isArray((res as { settings?: AutosaveSettings[] }).settings)) {
+        items = (res as { settings: AutosaveSettings[] }).settings;
+      }
+      if (items.length > 0) {
+        items.forEach((item) => this.writeLocal(item));
+        return items;
+      }
+    } catch (e) {
+      console.warn('Autosave admin settings list endpoint unreachable, using fallback cache:', e);
+    }
+    const cached = this.readLocal('global');
+    return cached ? [cached] : [{ ...DEFAULT_AUTOSAVE_SETTINGS }];
+  },
+
+  /** GET /v1/autosave-settings/active — get active settings for exam/global */
+  async getActive(examId?: number, signal?: AbortSignal): Promise<AutosaveSettings> {
+    try {
+      const scope = examId ? 'exam' : 'global';
+      const query: Record<string, string | number> = { scope };
+      if (examId) query.scope_id = examId;
+
+      const res = await apiRequest<{ success?: boolean; data?: { setting?: AutosaveSettings } } | { setting?: AutosaveSettings }>(
+        '/v1/autosave-settings/active',
+        { query, signal },
+      );
+      const root = res as Record<string, any>;
+      const setting = root.data?.setting || root.setting;
+      if (setting && typeof setting === 'object') {
+        const merged = { ...DEFAULT_AUTOSAVE_SETTINGS, ...setting };
+        this.writeLocal(merged);
+        return merged;
+      }
+    } catch (e) {
+      console.warn('Active autosave settings endpoint unreachable, checking local cache:', e);
+    }
+    const cached = this.readLocal(examId ? 'exam' : 'global', examId);
+    return cached ? { ...DEFAULT_AUTOSAVE_SETTINGS, ...cached } : { ...DEFAULT_AUTOSAVE_SETTINGS };
+  },
+
+  /** POST/PUT /v1/admin/autosave-settings — save configuration */
+  async save(settings: Partial<AutosaveSettings>): Promise<AutosaveSettings> {
+    const payload: AutosaveSettings = {
+      ...DEFAULT_AUTOSAVE_SETTINGS,
+      ...settings,
+    };
+
+    // Mirror locally immediately
+    this.writeLocal(payload);
+
+    try {
+      if (payload.id) {
+        const res = await apiRequest<any>(`/v1/admin/autosave-settings/${payload.id}`, {
+          method: 'PUT',
+          body: payload,
+        });
+        const saved = res?.setting || res?.data?.setting || payload;
+        this.writeLocal(saved);
+        return saved;
+      } else {
+        const res = await apiRequest<any>('/v1/admin/autosave-settings', {
+          method: 'POST',
+          body: payload,
+        });
+        const saved = res?.setting || res?.data?.setting || payload;
+        this.writeLocal(saved);
+        return saved;
+      }
+    } catch (e) {
+      console.warn('Failed to persist autosave settings to backend API, saved to local cache:', e);
+      return payload;
+    }
+  },
+
+  /** DELETE /v1/admin/autosave-settings/{id} */
+  async delete(id: number): Promise<void> {
+    try {
+      await apiRequest(`/v1/admin/autosave-settings/${id}`, { method: 'DELETE' });
+    } catch (e) {
+      console.warn('Failed to delete autosave settings from backend:', e);
+    }
   },
 };
 

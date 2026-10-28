@@ -1003,11 +1003,15 @@ export function AdminResults() {
                 <span className="admin-stat-trend neutral">Recorded</span>
               </div>
               <div className="admin-stat-value" data-testid="stat-total-attempts">
-                {(summary?.total_attempts ?? 0).toLocaleString()}
+                {(realExams.reduce(
+  (sum, exam) =>
+    sum + (exam.completed_attempts ?? 0) + (exam.ongoing_attempts ?? 0),
+  0,
+)).toLocaleString()}
               </div>
               <div className="admin-stat-label">Total Student Attempts</div>
               <div className="admin-stat-meta">
-                {(summary?.completed_attempts ?? 0).toLocaleString()} completed
+                {(realExams.reduce((sum, exam) => sum + (exam.completed_attempts ?? 0), 0)).toLocaleString()} completed
               </div>
             </div>
 

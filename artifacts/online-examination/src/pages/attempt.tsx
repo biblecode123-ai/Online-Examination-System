@@ -223,13 +223,14 @@ export function ExamAttempt() {
     (questionId: number, payload: SavedAnswer) => {
       pendingRef.current.set(questionId, payload);
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
+      const debounceMs = answerSync.getEssayDebounceMs();
       debounceRef.current = window.setTimeout(() => {
         void (async () => {
           for (const id of [...pendingRef.current.keys()]) {
             await flushQuestion(id);
           }
         })();
-      }, 800);
+      }, debounceMs);
     },
     [flushQuestion],
   );
@@ -248,22 +249,22 @@ export function ExamAttempt() {
         writeTextDraft(attemptId, draft);
       }
 
-      // Use new sync service
+      // Persist locally immediately and schedule dynamic batch sync
       try {
         await answerSync.queueAnswer(
           Number(attemptId),
           questionId,
           payload.option_id ?? null,
           payload.text ?? null,
-          realRef.current
+          realRef.current,
+          user?.id,
         );
-        setSyncStatus('synced');
       } catch (error) {
         console.error('Failed to queue answer:', error);
         setSyncStatus('error');
       }
     },
-    [attemptId],
+    [attemptId, user?.id],
   );
 
   // --- anti-cheat reporting (Real Exam flow only) -------------------------
@@ -315,6 +316,8 @@ export function ExamAttempt() {
         if (realRef.current) {
           const result = await realExamApi.submit(Number(attemptId));
           endedRef.current = true;
+          setSyncStatus('submitted');
+          void answerSync.cleanup(Number(attemptId));
           window.sessionStorage.setItem(
             resultVisibilityKey(attemptId),
             result.result_visibility ?? settingsRef.current?.result_visibility ?? 'score_only',
@@ -340,6 +343,8 @@ export function ExamAttempt() {
           started !== null ? Math.max(0, Math.round((serverNow() - started) / 1000)) : undefined;
         await attemptApi.submit(Number(attemptId), payload, timeTaken);
         endedRef.current = true;
+        setSyncStatus('submitted');
+        void answerSync.cleanup(Number(attemptId));
         setAttemptStatus('ended');
         setSaveState('saved');
         navigate(`/exams/${examId}/submission/${attemptId}`);
@@ -457,6 +462,26 @@ export function ExamAttempt() {
           else restored[id] = { ...restored[id], text };
         }
 
+        // Load autosave configuration from server / local storage cache
+        await answerSync.loadConfig(examRecord.id);
+
+        // Offline answer recovery: if enabled, restore unsubmitted answers from IndexedDB
+        if (answerSync.isOfflineRecoveryEnabled()) {
+          try {
+            const recovered = await answerSync.recover(Number(attemptId), user?.id);
+            for (const [qidStr, item] of Object.entries(recovered)) {
+              const qid = Number(qidStr);
+              const current = restored[qid];
+              restored[qid] = {
+                option_id: item.option_id ?? current?.option_id ?? null,
+                text: item.text ?? current?.text ?? undefined,
+              };
+            }
+          } catch (recoverErr) {
+            console.warn('[Attempt] Failed to recover offline answers from IndexedDB:', recoverErr);
+          }
+        }
+
         answersRef.current = restored;
         setAnswers(restored);
         setQuestions(questionRows);
@@ -471,9 +496,6 @@ export function ExamAttempt() {
         setLocked(status === 'locked');
         setSaveState('saved');
         setPhase('ready');
-
-        // Load autosave configuration
-        await answerSync.loadConfig(examRecord.id);
 
         // Register sync status callback
         answerSync.onStatusChange(Number(attemptId), (status) => {
@@ -819,35 +841,64 @@ export function ExamAttempt() {
           </span>
         </div>
 
-        <div className="save-status" data-testid="status-save">
-          {syncStatus === 'synced' && (
+        <div className="save-status" data-testid="status-save" aria-live="polite">
+          {syncStatus === 'saving_local' && (
             <>
-              <Check size={15} /> Saved on server
+              <Loader2 size={15} className="animate-spin text-amber-500" />
+              <span>Saving locally…</span>
+            </>
+          )}
+          {syncStatus === 'saved_local' && (
+            <>
+              <Check size={15} className="text-blue-500" />
+              <span>Saved on this device</span>
             </>
           )}
           {syncStatus === 'syncing' && (
             <>
-              <span className="save-dot" /> Syncing…
+              <Loader2 size={15} className="animate-spin text-blue-500" />
+              <span>Synchronizing answers…</span>
             </>
           )}
-          {syncStatus === 'idle' && (
+          {(syncStatus === 'synced' || syncStatus === 'idle') && (
             <>
-              <Check size={15} /> Ready
+              <Check size={15} className="text-emerald-500" />
+              <span>All answers synchronized</span>
             </>
           )}
           {syncStatus === 'offline' && (
             <>
-              <WifiOff size={15} /> Offline — saved locally
+              <WifiOff size={15} className="text-amber-500" />
+              <span>Connection interrupted — answers queued locally</span>
+            </>
+          )}
+          {syncStatus === 'retry' && (
+            <>
+              <Loader2 size={15} className="animate-spin text-orange-500" />
+              <span>Synchronization failed — retrying</span>
+            </>
+          )}
+          {syncStatus === 'submitting' && (
+            <>
+              <Loader2 size={15} className="animate-spin text-blue-600" />
+              <span>Submission pending confirmation</span>
+            </>
+          )}
+          {syncStatus === 'submitted' && (
+            <>
+              <Check size={15} className="text-emerald-600" />
+              <span>Exam submitted successfully</span>
             </>
           )}
           {syncStatus === 'error' && (
             <>
-              <CircleAlert size={15} /> Sync error — retry
+              <CircleAlert size={15} className="text-rose-500" />
+              <span>Sync error — retry</span>
             </>
           )}
         </div>
 
-        {syncStatus === 'error' && (
+        {(syncStatus === 'error' || syncStatus === 'retry') && (
           <button
             type="button"
             className="button button-secondary"

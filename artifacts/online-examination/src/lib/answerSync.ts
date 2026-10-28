@@ -2,75 +2,95 @@
  * Answer synchronization engine.
  *
  * Handles batch synchronization of pending answers to the server with
- * configurable time-based and answer-count-based triggers.
+ * dynamically configurable time-based, answer-count-based, and submission triggers.
  */
 
 import { answerPersistence, type PendingAnswer } from './answerPersistence';
-import { attemptApi, realExamApi } from './endpoints';
+import { attemptApi, autosaveApi, DEFAULT_AUTOSAVE_SETTINGS, realExamApi } from './endpoints';
 import { ApiError } from './api';
 import type { AutosaveSettings } from './types';
 
-export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'offline' | 'error';
+export type SyncStatus =
+  | 'idle'
+  | 'saving_local'
+  | 'saved_local'
+  | 'syncing'
+  | 'synced'
+  | 'offline'
+  | 'retry'
+  | 'submitting'
+  | 'submitted'
+  | 'error';
 
 export type AutosaveConfig = AutosaveSettings;
 
 class AnswerSyncService {
-  private config: AutosaveConfig | null = null;
+  private config: AutosaveConfig = { ...DEFAULT_AUTOSAVE_SETTINGS };
   private syncInProgress = new Set<number>(); // attempt IDs with active sync
   private lastSyncTime = new Map<number, number>(); // attempt ID -> timestamp
   private timeBasedTimers = new Map<number, NodeJS.Timeout>();
   private statusCallbacks = new Map<number, (status: SyncStatus) => void>();
+  private onlineListenerAttached = false;
+  private activeAttempts = new Set<{ attemptId: number; isRealExam: boolean }>();
+
+  constructor() {
+    this.attachOnlineListener();
+  }
+
+  private attachOnlineListener(): void {
+    if (typeof window === 'undefined' || this.onlineListenerAttached) return;
+    window.addEventListener('online', () => {
+      console.log('[AnswerSync] Network reconnected, resuming pending synchronizations');
+      this.activeAttempts.forEach(({ attemptId, isRealExam }) => {
+        void this.sync(attemptId, isRealExam);
+      });
+    });
+    this.onlineListenerAttached = true;
+  }
 
   /**
-   * Load autosave configuration from the server.
+   * Load autosave configuration from the backend or local cache with fallback.
    */
   async loadConfig(examId?: number): Promise<AutosaveConfig> {
-    // Shared defaults — also used when the settings endpoint is unreachable.
-    const fallback: AutosaveConfig = {
-      scope: examId ? 'exam' : 'global',
-      scope_id: examId ?? null,
-      time_based_enabled: true,
-      time_interval_seconds: 300,
-      answer_count_enabled: true,
-      answer_count_threshold: 5,
-      max_batch_size: 50,
-      max_concurrent_requests: 1,
-      min_sync_interval_seconds: 30,
-      retry_max_attempts: 5,
-      retry_initial_delay_ms: 1000,
-      retry_max_delay_ms: 30000,
-      active: true,
-    };
     try {
-      const response = await fetch(
-        `/api/v1/autosave-settings/active?scope=${examId ? 'exam' : 'global'}${examId ? `&scope_id=${examId}` : ''}`
-      );
-      const data = await response.json();
-
-      if (data.success && data.data?.setting) {
-        // Server payloads may omit scope/scope_id on older records — the
-        // requested scope is always the correct fallback for this load.
-        const setting = { ...fallback, ...data.data.setting } as AutosaveConfig;
-        this.config = setting;
-        return setting;
-      }
-
-      // Fallback to defaults
-      this.config = fallback;
-      return fallback;
+      const setting = await autosaveApi.getActive(examId);
+      this.config = { ...DEFAULT_AUTOSAVE_SETTINGS, ...setting };
+      return this.config;
     } catch (error) {
-      console.error('Failed to load autosave config:', error);
-      // Return safe defaults
-      this.config = fallback;
-      return fallback;
+      console.warn('[AnswerSync] Failed to load server config, using defaults:', error);
+      this.config = { ...DEFAULT_AUTOSAVE_SETTINGS };
+      return this.config;
     }
+  }
+
+  /**
+   * Get the currently active configuration.
+   */
+  getConfig(): AutosaveConfig {
+    return this.config;
+  }
+
+  /**
+   * Get essay debounce delay in milliseconds (configured setting).
+   */
+  getEssayDebounceMs(): number {
+    const seconds = this.config.local_essay_debounce_seconds ?? 3;
+    return Math.max(500, Math.min(seconds * 1000, 10000));
+  }
+
+  /**
+   * Check if offline answer recovery from IndexedDB is enabled.
+   */
+  isOfflineRecoveryEnabled(): boolean {
+    return this.config.offline_recovery_enabled ?? true;
   }
 
   /**
    * Register a status callback for an attempt.
    */
-  onStatusChange(attemptId: number, callback: (status: SyncStatus) => void): void {
+  onStatusChange(attemptId: number, callback: (status: SyncStatus) => void): () => void {
     this.statusCallbacks.set(attemptId, callback);
+    return () => this.statusCallbacks.delete(attemptId);
   }
 
   /**
@@ -83,15 +103,20 @@ class AnswerSyncService {
 
   /**
    * Queue an answer for synchronization.
+   * Immediately saves locally to IndexedDB before scheduling sync.
    */
   async queueAnswer(
     attemptId: number,
     questionId: number,
     optionId: number | null,
     answerText: string | null,
-    isRealExam: boolean
+    isRealExam: boolean,
+    studentId?: number | null,
   ): Promise<void> {
-    // Get existing answer to determine version
+    this.activeAttempts.add({ attemptId, isRealExam });
+    this.updateStatus(attemptId, 'saving_local');
+
+    // Get existing answer to increment version for conflict detection
     const existing = await answerPersistence.getAnswer(attemptId, questionId);
     const version = existing ? existing.version + 1 : 1;
 
@@ -103,21 +128,29 @@ class AnswerSyncService {
       version,
       timestamp: Date.now(),
       synced: false,
+      studentId: studentId ?? null,
     };
 
-    // Save locally first
+    // 1. Save locally immediately
     await answerPersistence.saveAnswer(answer);
+    this.updateStatus(attemptId, 'saved_local');
 
-    // Check if we should trigger sync
-    if (this.config?.answer_count_enabled) {
-      const unsyncedCount = await answerPersistence.getUnsyncedCount(attemptId);
-      if (unsyncedCount >= this.config.answer_count_threshold) {
+    // If automatic sync is disabled, answers remain safely in local storage until explicit submit
+    if (this.config.active === false) {
+      return;
+    }
+
+    // 2. Check if answer count threshold trigger reached
+    if (this.config.answer_count_enabled) {
+      const unsyncedCount = await answerPersistence.getUnsyncedCount(attemptId, studentId);
+      const threshold = this.config.answer_count_threshold || 5;
+      if (unsyncedCount >= threshold) {
         await this.sync(attemptId, isRealExam);
         return;
       }
     }
 
-    // Reset time-based timer
+    // 3. Reset time-based sync timer
     this.resetTimeBasedSync(attemptId, isRealExam);
   }
 
@@ -125,18 +158,17 @@ class AnswerSyncService {
    * Reset the time-based sync timer.
    */
   private resetTimeBasedSync(attemptId: number, isRealExam: boolean): void {
-    // Clear existing timer
     const existingTimer = this.timeBasedTimers.get(attemptId);
     if (existingTimer) {
       clearTimeout(existingTimer);
     }
 
-    if (!this.config?.time_based_enabled) return;
+    if (!this.config.time_based_enabled || this.config.active === false) return;
 
-    // Set new timer
+    const intervalSeconds = this.config.time_interval_seconds || 30;
     const timer = setTimeout(() => {
-      this.sync(attemptId, isRealExam);
-    }, this.config.time_interval_seconds * 1000);
+      void this.sync(attemptId, isRealExam);
+    }, intervalSeconds * 1000);
 
     this.timeBasedTimers.set(attemptId, timer);
   }
@@ -145,34 +177,38 @@ class AnswerSyncService {
    * Synchronize pending answers for an attempt.
    */
   async sync(attemptId: number, isRealExam: boolean): Promise<void> {
-    // Prevent concurrent syncs for the same attempt
+    // Prevent overlapping sync requests for the same attempt
     if (this.syncInProgress.has(attemptId)) return;
 
-    // Check minimum sync interval
+    // Check minimum sync interval (throttle)
     const lastSync = this.lastSyncTime.get(attemptId) || 0;
     const elapsed = Date.now() - lastSync;
-    if (elapsed < (this.config?.min_sync_interval_seconds || 30) * 1000) {
+    const minInterval = (this.config.min_sync_interval_seconds || 10) * 1000;
+    if (elapsed < minInterval && elapsed > 0) {
       return;
     }
 
     // Get unsynced answers
     const unsyncedAnswers = await answerPersistence.getUnsyncedAnswers(attemptId);
-    if (unsyncedAnswers.length === 0) return;
+    if (unsyncedAnswers.length === 0) {
+      this.updateStatus(attemptId, 'synced');
+      return;
+    }
 
     // Mark as syncing
     this.syncInProgress.add(attemptId);
     this.updateStatus(attemptId, 'syncing');
 
     try {
-      // Batch answers (respect max_batch_size)
-      const batchSize = this.config?.max_batch_size || 50;
+      // Chunk answers into batches respecting configured max_batch_size
+      const batchSize = Math.max(1, Math.min(this.config.max_batch_size || 25, 200));
       const batches: PendingAnswer[][] = [];
 
       for (let i = 0; i < unsyncedAnswers.length; i += batchSize) {
         batches.push(unsyncedAnswers.slice(i, i + batchSize));
       }
 
-      // Sync each batch
+      // Sync each batch sequentially
       for (const batch of batches) {
         await this.syncBatch(attemptId, batch, isRealExam);
       }
@@ -180,11 +216,17 @@ class AnswerSyncService {
       this.lastSyncTime.set(attemptId, Date.now());
       this.updateStatus(attemptId, 'synced');
     } catch (error) {
-      console.error('Sync failed:', error);
-      this.updateStatus(attemptId, 'offline');
+      console.warn('[AnswerSync] Sync failed, keeping local answers:', error);
 
-      // Retry with exponential backoff
-      if (error instanceof ApiError && !this.isPermanentError(error)) {
+      // Check if browser is offline
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        this.updateStatus(attemptId, 'offline');
+      } else {
+        this.updateStatus(attemptId, 'retry');
+      }
+
+      // Retry with exponential backoff if not a permanent rejection
+      if (!(error instanceof ApiError) || !this.isPermanentError(error)) {
         await this.retrySync(attemptId, isRealExam);
       } else {
         this.updateStatus(attemptId, 'error');
@@ -195,12 +237,12 @@ class AnswerSyncService {
   }
 
   /**
-   * Sync a single batch of answers.
+   * Sync a single batch of answers with server acknowledgment.
    */
   private async syncBatch(
     attemptId: number,
     answers: PendingAnswer[],
-    isRealExam: boolean
+    isRealExam: boolean,
   ): Promise<void> {
     const payload = answers.map((a) => ({
       question_id: a.questionId,
@@ -215,22 +257,22 @@ class AnswerSyncService {
       await attemptApi.batchSaveAnswers(attemptId, { answers: payload });
     }
 
-    // Mark as synced
+    // Mark successfully acknowledged answers as synced in IndexedDB
     const questionIds = answers.map((a) => a.questionId);
     await answerPersistence.markAsSynced(attemptId, questionIds);
   }
 
   /**
-   * Retry sync with exponential backoff.
+   * Retry sync with exponential backoff and randomized jitter.
    */
   private async retrySync(attemptId: number, isRealExam: boolean): Promise<void> {
-    const maxAttempts = this.config?.retry_max_attempts || 5;
-    const initialDelay = this.config?.retry_initial_delay_ms || 1000;
-    const maxDelay = this.config?.retry_max_delay_ms || 30000;
+    const maxAttempts = this.config.retry_max_attempts || 5;
+    const initialDelay = this.config.retry_initial_delay_ms || 5000;
+    const maxDelay = this.config.retry_max_delay_ms || 30000;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       const delay = Math.min(initialDelay * Math.pow(2, attempt - 1), maxDelay);
-      const jitter = Math.random() * 0.2 * delay; // 20% jitter
+      const jitter = Math.random() * 0.25 * delay; // 25% randomized jitter
 
       await new Promise((resolve) => setTimeout(resolve, delay + jitter));
 
@@ -240,23 +282,24 @@ class AnswerSyncService {
       } catch (error) {
         if (attempt === maxAttempts) {
           this.updateStatus(attemptId, 'error');
-          throw error;
         }
       }
     }
   }
 
   /**
-   * Check if an error is permanent (should not retry).
+   * Check if an error is permanent (e.g. attempt locked, completed, expired, or forbidden).
    */
   private isPermanentError(error: ApiError): boolean {
     return error.status === 403 || error.status === 404 || error.status === 423;
   }
 
   /**
-   * Flush all pending answers (for final submission).
+   * Flush all pending answers before final submission.
    */
   async flush(attemptId: number, isRealExam: boolean): Promise<void> {
+    this.updateStatus(attemptId, 'submitting');
+
     // Cancel time-based timer
     const timer = this.timeBasedTimers.get(attemptId);
     if (timer) {
@@ -264,7 +307,7 @@ class AnswerSyncService {
       this.timeBasedTimers.delete(attemptId);
     }
 
-    // Sync all pending answers
+    // Sync all pending answers immediately
     const unsyncedAnswers = await answerPersistence.getUnsyncedAnswers(attemptId);
     if (unsyncedAnswers.length > 0) {
       await this.sync(attemptId, isRealExam);
@@ -272,32 +315,32 @@ class AnswerSyncService {
   }
 
   /**
-   * Clean up after final submission.
+   * Clean up after final submission confirmed by server.
    */
   async cleanup(attemptId: number): Promise<void> {
-    // Cancel timer
     const timer = this.timeBasedTimers.get(attemptId);
     if (timer) {
       clearTimeout(timer);
       this.timeBasedTimers.delete(attemptId);
     }
 
-    // Clear sync state
     this.syncInProgress.delete(attemptId);
     this.lastSyncTime.delete(attemptId);
     this.statusCallbacks.delete(attemptId);
+    this.activeAttempts.forEach((item) => {
+      if (item.attemptId === attemptId) this.activeAttempts.delete(item);
+    });
 
-    // Delete local answers
+    // Delete local answers only after confirmed final submission
     await answerPersistence.deleteAnswersForAttempt(attemptId);
   }
 
   /**
-   * Recover answers for an attempt (for shared computer scenario).
+   * Recover answers for an attempt (e.g. after refresh or browser restart).
    */
-  async recover(attemptId: number): Promise<PendingAnswer[]> {
-    return await answerPersistence.getAnswersForAttempt(attemptId);
+  async recover(attemptId: number, studentId?: number | null) {
+    return await answerPersistence.recoverAnswersForAttempt(attemptId, studentId);
   }
 }
 
-// Singleton instance
 export const answerSync = new AnswerSyncService();

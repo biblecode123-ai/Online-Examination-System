@@ -807,6 +807,8 @@ export interface AutosaveSettings {
   retry_max_attempts: number;
   retry_initial_delay_ms: number;
   retry_max_delay_ms: number;
+  local_essay_debounce_seconds?: number;
+  offline_recovery_enabled?: boolean;
   active: boolean;
 }
 
