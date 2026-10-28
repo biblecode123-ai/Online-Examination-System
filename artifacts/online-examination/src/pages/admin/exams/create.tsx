@@ -42,6 +42,7 @@ export function AdminExamCreate() {
   const [departmentIds, setDepartmentIds] = useState<number[]>([]);
   const [deptSearch, setDeptSearch] = useState('');
   const [selectedCollege, setSelectedCollege] = useState<string>('all');
+  const [onlySelected, setOnlySelected] = useState(false);
   const [totalTime, setTotalTime] = useState(60);
   const [passing, setPassing] = useState(50);
   const [password, setPassword] = useState('');
@@ -59,7 +60,7 @@ export function AdminExamCreate() {
     staleTime: 5 * 60_000,
   });
 
-  /** The one category this workflow may create â resolved from the backend. */
+  /** The one category this workflow may create — resolved from the backend. */
   const realCategory = useMemo(() => {
     const cats = catQuery.data ?? [];
     return (
@@ -83,11 +84,12 @@ export function AdminExamCreate() {
     return Array.from(set).sort();
   }, [deptQuery.data]);
 
-  /** Filter departments by search keyword and college */
+  /** Filter departments by search keyword, college, and onlySelected */
   const filteredDepartments = useMemo(() => {
     const list = deptQuery.data ?? [];
     const q = deptSearch.trim().toLowerCase();
     return list.filter((dept) => {
+      if (onlySelected && !departmentIds.includes(dept.id)) return false;
       const name = String(dept.name ?? '').toLowerCase();
       const col = typeof dept.college === 'string' ? dept.college.toLowerCase() : '';
       const abbr = typeof dept.abbreviation === 'string' ? dept.abbreviation.toLowerCase() : '';
@@ -101,7 +103,7 @@ export function AdminExamCreate() {
         (typeof dept.college === 'string' && dept.college.trim() === selectedCollege);
       return matchesSearch && matchesCollege;
     });
-  }, [deptQuery.data, deptSearch, selectedCollege]);
+  }, [deptQuery.data, deptSearch, selectedCollege, onlySelected, departmentIds]);
 
   /** Selected department objects for chips display */
   const selectedDeptObjects = useMemo(() => {
@@ -276,18 +278,18 @@ export function AdminExamCreate() {
           </div>
         </div>
 
-        {/* SECTION 2: TARGET DEPARTMENTS (Fixed & Redesigned) */}
+        {/* SECTION 2: TARGET DEPARTMENTS (Searchable Multi-Selector) */}
         <div className="card exam-form-section">
           <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <h2>2 Â· Target departments *</h2>
+              <h2>2 · Target departments *</h2>
               <small className="text-muted">
                 Select one or more departments eligible to take this examination.
               </small>
             </div>
             <span className="badge badge-blue">
               {deptQuery.isLoading
-                ? 'Loading all departments...'
+                ? 'Loading departments...'
                 : `${deptQuery.data?.length ?? 0} total departments`}
             </span>
           </div>
@@ -299,7 +301,7 @@ export function AdminExamCreate() {
             )}
 
             {deptQuery.isLoading ? (
-              <LoadingBlock label="Loading all departmentsâ¦" />
+              <LoadingBlock label="Loading all departments..." />
             ) : deptQuery.isError ? (
               <ErrorBox error={deptQuery.error} onRetry={() => void deptQuery.refetch()} />
             ) : (
@@ -310,11 +312,32 @@ export function AdminExamCreate() {
                     <Search size={15} />
                     <input
                       type="text"
-                      placeholder="Search departments by name, college, codeâ¦"
+                      placeholder="Search departments by name, college, code..."
                       value={deptSearch}
                       onChange={(e) => setDeptSearch(e.target.value)}
                       data-testid="input-dept-search"
                     />
+                    {deptSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setDeptSearch('')}
+                        style={{
+                          position: 'absolute',
+                          right: 10,
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          color: '#888',
+                          padding: 2,
+                        }}
+                        title="Clear search"
+                        aria-label="Clear search"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
                   </div>
 
                   {colleges.length > 0 && (
@@ -346,11 +369,21 @@ export function AdminExamCreate() {
                     {departmentIds.length > 0 && (
                       <button
                         type="button"
+                        className={`dept-selector-btn ${onlySelected ? 'button-secondary' : ''}`}
+                        onClick={() => setOnlySelected((prev) => !prev)}
+                        title="Toggle showing only selected departments"
+                      >
+                        {onlySelected ? 'Show All' : `Selected Only (${departmentIds.length})`}
+                      </button>
+                    )}
+                    {departmentIds.length > 0 && (
+                      <button
+                        type="button"
                         className="dept-selector-btn"
                         onClick={clearSelection}
                         title="Deselect all departments"
                       >
-                        <RotateCcw size={14} /> Clear Selection
+                        <RotateCcw size={14} /> Clear All
                       </button>
                     )}
                     <span className="dept-selector-count">
@@ -360,8 +393,11 @@ export function AdminExamCreate() {
                 </div>
 
                 {/* Selected Departments Chips Bar */}
-                {selectedDeptObjects.length > 0 && (
+                {selectedDeptObjects.length > 0 ? (
                   <div className="dept-selected-chips-area">
+                    <span style={{ fontSize: 11, fontWeight: 600, color: '#6366f1', alignSelf: 'center', marginRight: 4 }}>
+                      Selected ({selectedDeptObjects.length}):
+                    </span>
                     {selectedDeptObjects.map((d) => (
                       <span key={d.id} className="dept-chip">
                         <span>{d.name}</span>
@@ -375,6 +411,10 @@ export function AdminExamCreate() {
                         </button>
                       </span>
                     ))}
+                  </div>
+                ) : (
+                  <div style={{ padding: '8px 14px', fontSize: 12, color: 'var(--text-muted, #64748b)', background: 'var(--surface-muted, #f8fafc)', borderBottom: '1px solid var(--border)' }}>
+                    Select one or more departments below for this exam. Click any department card or checkbox to toggle.
                   </div>
                 )}
 
@@ -391,6 +431,7 @@ export function AdminExamCreate() {
                           onClick={() => {
                             setDeptSearch('');
                             setSelectedCollege('all');
+                            setOnlySelected(false);
                           }}
                         >
                           Reset search filter
@@ -439,6 +480,9 @@ export function AdminExamCreate() {
                 </div>
               </div>
             )}
+            <small className="field-hint" style={{ marginTop: 8, display: 'block' }}>
+              Select one or more departments for this exam.
+            </small>
           </div>
         </div>
 
@@ -449,7 +493,7 @@ export function AdminExamCreate() {
             style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
           >
             <div>
-              <h2>3 Â· Exam-level instructions for students</h2>
+              <h2>3 · Exam-level instructions for students</h2>
               <small className="text-muted">
                 General rules and directions presented to students before unlocking and attempting the exam.
               </small>
@@ -499,7 +543,7 @@ export function AdminExamCreate() {
         {/* SECTION 4: EXAMINATION CONFIGURATION */}
         <div className="card exam-form-section">
           <div className="card-header">
-            <h2>4 Â· Examination configuration</h2>
+            <h2>4 · Examination configuration</h2>
           </div>
           <div className="card-body exam-form-grid">
             <div className="form-group">
