@@ -589,12 +589,17 @@ select:focus-visible {
   transition: all 0.15s;
 }
 
-.icon-button:hover {
+.icon-button:hover:not(:disabled) {
   color: var(--brand-primary);
   background: var(--brand-primary-light);
 }
 
-.icon-button-danger:hover {
+.icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.icon-button-danger:hover:not(:disabled) {
   color: var(--error);
   background: var(--error-background);
 }
@@ -4234,6 +4239,66 @@ table.table {
   padding-bottom: 0;
 }
 
+/* §5.3 — outcome filter chips above the question-by-question review. */
+.result-outcome-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.result-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  background: var(--surface, #fff);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-secondary, #475569);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.result-filter-chip:hover {
+  border-color: var(--brand-primary);
+  color: var(--brand-primary);
+}
+
+.result-filter-chip.active {
+  border-color: var(--brand-primary);
+  background: var(--brand-primary-light, #eef2ff);
+  color: var(--brand-primary-active, var(--brand-primary));
+}
+
+.result-filter-chip:focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 2px;
+}
+
+.result-filter-count {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 9999px;
+  background: var(--bg-subtle, #f1f5f9);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--text-secondary, #475569);
+}
+
+.result-filter-chip.active .result-filter-count {
+  background: var(--brand-primary);
+  color: #fff;
+}
+
 .review-answer-head {
   display: flex;
   align-items: flex-start;
@@ -5634,8 +5699,133 @@ table.table {
   margin: -4px 0 10px;
 }
 
+/* Matching question, student attempt — Column A items each carry a dropdown
+   beside them; Column B is the reference list of options (including
+   distractors). One-to-one matches are enforced by disabling an option once
+   another item holds it; nothing here reveals the answer key. */
 .matching-student-board {
-  max-width: 720px;
+  max-width: 860px;
+  margin-top: 4px;
+}
+
+.matching-hint {
+  margin: 0 0 12px;
+  color: var(--text-secondary);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+.matching-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.matching-col {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.matching-col-head {
+  padding: 9px 14px;
+  background: var(--brand-primary-light);
+  border-bottom: 1px solid var(--border);
+  color: var(--brand-primary-active);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+
+.matching-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  min-width: 0;
+}
+
+.matching-col-head + .matching-row {
+  border-top: 0;
+}
+
+.matching-item-text {
+  flex: 1 1 140px;
+  min-width: 0;
+  font-size: 14.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.matching-index,
+.matching-letter {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.matching-select {
+  flex: 0 0 200px;
+  max-width: 100%;
+  font-size: 14px;
+}
+
+.matching-select-picked {
+  border-color: var(--brand-primary);
+}
+
+.matching-option-held {
+  background: var(--brand-primary-light);
+}
+
+.matching-option-held .matching-letter {
+  background: var(--brand-primary);
+  border-color: var(--brand-primary);
+  color: var(--text-inverse);
+}
+
+.matching-used {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background: var(--brand-primary);
+  color: var(--text-inverse);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.matching-progress {
+  margin-top: 12px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+/* Stack the reference column under the items once side-by-side gets tight,
+   then give each dropdown its own full-width line on phones. */
+@media (max-width: 900px) {
+  .matching-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .matching-row-a .matching-select {
+    flex: 1 1 100%;
+  }
 }
 
 /* Submission reference */
@@ -6270,4 +6460,29 @@ table.table {
 
 .passage-list-item.passage-editing input {
   width: 100%;
+}
+
+/* Marks integrity flag (spec §7): marks that exceed the possible total, or a
+   percentage that disagrees with the stored marks, are marked instead of being
+   silently displayed as correct. */
+.marks-flag-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 4px;
+  border-radius: 50%;
+  background: var(--error, #dc2626);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  font-style: normal;
+  line-height: 1;
+  cursor: help;
+  vertical-align: middle;
+}
+
+td[data-testid^="row-marks-"] .marks-flag-mark {
+  margin-left: 3px;
 }

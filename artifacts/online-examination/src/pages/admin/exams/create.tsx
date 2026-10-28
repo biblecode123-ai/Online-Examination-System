@@ -6,13 +6,13 @@ import { adminExamApi } from '../../../lib/endpoints';
 import { ApiError } from '../../../lib/api';
 import { ErrorBox, LoadingBlock, PageTitle } from '../../../components/shell';
 
-/**
- * Create a new official Real Exam.
- *
+/** 
+ * Create a new official Real Exam. 
+ * 
  * Only exams of the existing `Real Exam` category may be created through this
  * workflow — the category is fetched from the backend (never hardcoded). The
  * governed store endpoint (POST /v1/teacher/real-exams) accepts title,
- * description, ONE department, duration (1–480 min), passing percentage and a
+ * description, ONE OR MORE departments, duration (1–480 min), passing percentage and a
  * REQUIRED password; every exam is born as a draft. Cross-checked against
  * TeacherRealExamController::store in ofijan-backend.
  */
@@ -22,7 +22,7 @@ export function AdminExamCreate() {
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [departmentId, setDepartmentId] = useState<number | null>(null);
+  const [departmentIds, setDepartmentIds] = useState<number[]>([]);
   const [totalTime, setTotalTime] = useState(60);
   const [passing, setPassing] = useState(50);
   const [password, setPassword] = useState('');
@@ -55,7 +55,7 @@ export function AdminExamCreate() {
       adminExamApi.createExam({
         exam_title: title.trim(),
         description: description.trim() || null,
-        department_id: departmentId ?? undefined,
+        department_ids: departmentIds.length > 0 ? departmentIds : undefined,
         total_time: Number(totalTime),
         passing_percentage: Number(passing),
         exam_password: password,
@@ -68,7 +68,7 @@ export function AdminExamCreate() {
 
   const clientErrors: Record<string, string> = {};
   if (!title.trim()) clientErrors.title = 'An exam title is required.';
-  if (!departmentId) clientErrors.department = 'Select the department this exam belongs to.';
+  if (departmentIds.length === 0) clientErrors.department = 'Select at least one department.';
   if (!Number.isFinite(Number(totalTime)) || Number(totalTime) < 1 || Number(totalTime) > 480)
     clientErrors.total_time = 'Allocated time must be between 1 and 480 minutes (backend limit).';
   if (Number(passing) < 0 || Number(passing) > 100)
@@ -178,28 +178,27 @@ export function AdminExamCreate() {
             </div>
 
             <div className="form-group span-2">
-              <label htmlFor="exam-department">Department *</label>
+              <label htmlFor="exam-departments">Departments *</label>
               <select
-                id="exam-department"
+                id="exam-departments"
                 className="select"
-                value={departmentId ?? ''}
-                onChange={(e) => setDepartmentId(Number(e.target.value) || null)}
-                data-testid="select-exam-department"
+                multiple
+                data-testid="select-exam-departments"
               >
-                <option value="">Select a department…</option>
+                <option value="">Select departments…</option>
                 {(deptQuery.data ?? []).map((dept) => (
                   <option key={dept.id} value={dept.id}>
                     {dept.name}
                   </option>
                 ))}
               </select>
-
-              {errFor('department', 'department_id') && (
-                <small className="field-error">{errFor('department', 'department_id')}</small>
-              )}
+              <br />
               <small className="field-hint">
-                One department per exam — the governed backend workflow accepts a single department.
+                Select one or more departments for this exam.
               </small>
+              {errFor('department', 'department_ids') && (
+                <small className="field-error">{errFor('department', 'department_ids')}</small>
+              )}
             </div>
           </div>
         </div>
@@ -282,8 +281,7 @@ export function AdminExamCreate() {
             disabled={createMutation.isPending}
             data-testid="button-save-draft"
           >
-            <Save size={16} />
-            {createMutation.isPending ? 'Creating draft…' : 'Save as draft'}
+            <Save size={16} />{createMutation.isPending ? 'Creating draft…' : 'Save as draft'}
           </button>
         </div>
         <small className="field-hint form-footnote">

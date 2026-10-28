@@ -1291,8 +1291,24 @@ function AnswerField({
 }) {
   // Matching question rendering — Column A / Column B layout
   if (question.question_type === 'matching') {
-    const leftItems = question.matching_data?.left_items ?? [];
-    const rightOptions = question.matching_data?.right_options ?? [];
+    // Try new format first, fall back to legacy matching_pairs
+    let leftItems = question.matching_data?.left_items ?? [];
+    let rightOptions = question.matching_data?.right_options ?? [];
+
+    // Fallback: convert legacy matching_pairs to Column A/Column B format.
+    // correct_option_id is always null here — this is the student-facing
+    // renderer, so the answer key must never be present in the payload.
+    if (leftItems.length === 0 && rightOptions.length === 0 && question.matching_pairs) {
+      leftItems = question.matching_pairs.map((mp, idx) => ({
+        id: idx,
+        text: mp.left_item,
+        correct_option_id: null,
+      }));
+      rightOptions = question.matching_pairs.map((mp, idx) => ({
+        id: idx,
+        text: mp.right_item,
+      }));
+    }
 
     let currentMatches: Record<string, string> = {};
     if (value?.text) {
@@ -1306,187 +1322,105 @@ function AnswerField({
       }
     }
 
-    const [pickedLeft, setPickedLeft] = useState<string | null>(null);
-    const [pickedRight, setPickedRight] = useState<string | null>(null);
+    // One-to-one matching: record which Column A item currently holds each
+    // Column B option so it can be disabled in every other dropdown. Old data
+    // containing duplicates keeps its first holder as the claim; the duplicate
+    // stays visible and editable instead of being hidden.
+    const rightHeldBy = new Map<string, string>();
+    for (const [leftText, rightText] of Object.entries(currentMatches)) {
+      if (rightText && !rightHeldBy.has(rightText)) rightHeldBy.set(rightText, leftText);
+    }
 
-    const matchedLeftTexts = Object.keys(currentMatches);
-    const matchedRightTexts = Object.values(currentMatches);
-
-    const pickLeft = (leftText: string) => {
-      if (pickedLeft === leftText) {
-        setPickedLeft(null);
-        return;
-      }
-      setPickedLeft(leftText);
-      if (pickedRight) {
-        const next = { ...currentMatches, [leftText]: pickedRight };
-        onChange({ option_id: null, text: JSON.stringify(next) });
-        setPickedLeft(null);
-        setPickedRight(null);
-      }
+    // Persist a pick as the existing left-text -> right-text map, so autosave,
+    // restoration on navigation, and backend grading keep working unchanged.
+    const setMatch = (leftText: string, rightText: string) => {
+      const next = { ...currentMatches };
+      if (rightText) next[leftText] = rightText;
+      else delete next[leftText];
+      onChange({ option_id: null, text: JSON.stringify(next) });
     };
 
-    const pickRight = (rightText: string) => {
-      if (pickedRight === rightText) {
-        setPickedRight(null);
-        return;
-      }
-      setPickedRight(rightText);
-      if (pickedLeft) {
-        const next = { ...currentMatches, [pickedLeft]: rightText };
-        onChange({ option_id: null, text: JSON.stringify(next) });
-        setPickedLeft(null);
-        setPickedRight(null);
-      }
-    };
-
-    const isLeftMatched = (text: string) => matchedLeftTexts.includes(text);
-    const isRightMatched = (text: string) => matchedRightTexts.includes(text);
-    const isLeftPicked = (text: string) => pickedLeft === text;
-    const isRightPicked = (text: string) => pickedRight === text;
+    const matchedCount = leftItems.filter((item) => Boolean(currentMatches[item.text])).length;
+    const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
     if (leftItems.length > 0 && rightOptions.length > 0) {
       return (
         <div
-          className="matching-column-board"
-          style={{ margin: '1.25rem 0' }}
+          className="matching-student-board"
+          role="group"
+          aria-label="Matching question"
           data-testid={`matching-board-${question.id}`}
         >
-          <div style={{ marginBottom: '0.75rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-            Click one item in Column A, then its match in Column B.
-          </div>
-          <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'flex-start' }}>
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <div style={{
-                fontWeight: 700,
-                textAlign: 'center',
-                padding: '0.5rem',
-                background: 'var(--bg-subtle, #f8fafc)',
-                border: '1px solid var(--border-color, #e2e8f0)',
-                borderRadius: '6px',
-                color: 'var(--text-muted)',
-              }}>
-                Column A
-              </div>
-              {leftItems.map((left) => {
-                const matched = isLeftMatched(left.text);
-                const picked = isLeftPicked(left.text);
+          <p className="matching-hint">
+            Choose a match from Column B for each item in Column A. Each option can be used once;
+            select No answer to clear a match.
+          </p>
+          <div className="matching-columns">
+            <div className="matching-col">
+              <div className="matching-col-head">Column A — Items</div>
+              {leftItems.map((left, idx) => {
+                const picked = currentMatches[left.text] ?? '';
                 return (
-                  <button
-                    key={left.id ?? left.text}
-                    type="button"
-                    onClick={() => pickLeft(left.text)}
-                    disabled={disabled}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.5rem',
-                      padding: '0.6rem 0.8rem',
-                      border: matched
-                        ? '2px solid var(--success-color, #10b981)'
-                        : picked
-                          ? '2px solid var(--primary-color, #3b82f6)'
-                          : '1px solid var(--border-color, #e2e8f0)',
-                      borderRadius: '6px',
-                      background: matched
-                        ? 'var(--success-bg, #ecfdf5)'
-                        : picked
-                          ? 'var(--primary-bg, #eff6ff)'
-                          : 'transparent',
-                      cursor: disabled ? 'not-allowed' : 'pointer',
-                      textAlign: 'left',
-                      fontSize: '0.95rem',
-                      color: matched ? 'var(--success-color, #10b981)' : 'inherit',
-                    }}
-                  >
-                    {matched && (
-                      <span style={{ color: 'var(--success-color, #10b981)', fontWeight: 700 }}>
-                        ✓
-                      </span>
-                    )}
-                    {picked && (
-                      <span style={{ color: 'var(--primary-color, #3b82f6)', fontWeight: 700 }}>
-                        ●
-                      </span>
-                    )}
-                    <span
-                      style={{ flex: 1, textDecoration: matched ? 'line-through' : 'none' }}
-                    >
-                      {left.text}
+                  <div className="matching-row matching-row-a" key={left.id ?? left.text ?? idx}>
+                    <span className="matching-index" aria-hidden="true">
+                      {idx + 1}
                     </span>
-                  </button>
+                    <span className="matching-item-text">{left.text}</span>
+                    <label className="sr-only" htmlFor={`matching-select-${question.id}-${idx}`}>
+                      Match for item {idx + 1}: {left.text}
+                    </label>
+                    <select
+                      id={`matching-select-${question.id}-${idx}`}
+                      className={`matching-select${picked ? ' matching-select-picked' : ''}`}
+                      data-testid={`matching-select-${question.id}-${idx}`}
+                      value={picked}
+                      disabled={disabled}
+                      onChange={(event) => setMatch(left.text, event.target.value)}
+                    >
+                      <option value="">No answer</option>
+                      {picked && !rightOptions.some((option) => option.text === picked) && (
+                        <option value={picked}>{picked}</option>
+                      )}
+                      {rightOptions.map((option, optionIdx) => (
+                        <option
+                          key={option.id ?? option.text ?? optionIdx}
+                          value={option.text}
+                          disabled={
+                            option.text !== '' &&
+                            rightHeldBy.has(option.text) &&
+                            rightHeldBy.get(option.text) !== left.text
+                          }
+                        >
+                          {LETTERS[optionIdx % LETTERS.length]}. {option.text}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 );
               })}
             </div>
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <div style={{
-                fontWeight: 700,
-                textAlign: 'center',
-                padding: '0.5rem',
-                background: 'var(--bg-subtle, #f8fafc)',
-                border: '1px solid var(--border-color, #e2e8f0)',
-                borderRadius: '6px',
-                color: 'var(--text-muted)',
-              }}>
-                Column B
-              </div>
-              {rightOptions.map((right) => {
-                const matched = isRightMatched(right.text);
-                const picked = isRightPicked(right.text);
+            <div className="matching-col">
+              <div className="matching-col-head">Column B — Matching Options</div>
+              {rightOptions.map((option, optionIdx) => {
+                const held = rightHeldBy.has(option.text);
                 return (
-                  <button
-                    key={right.id}
-                    type="button"
-                    onClick={() => pickRight(right.text)}
-                    disabled={disabled}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.5rem',
-                      padding: '0.6rem 0.8rem',
-                      border: matched
-                        ? '2px solid var(--success-color, #10b981)'
-                        : picked
-                          ? '2px solid var(--primary-color, #3b82f6)'
-                          : '1px solid var(--border-color, #e2e8f0)',
-                      borderRadius: '6px',
-                      background: matched
-                        ? 'var(--success-bg, #ecfdf5)'
-                        : picked
-                          ? 'var(--primary-bg, #eff6ff)'
-                          : 'transparent',
-                      cursor: disabled ? 'not-allowed' : 'pointer',
-                      textAlign: 'left',
-                      fontSize: '0.95rem',
-                      color: matched ? 'var(--success-color, #10b981)' : 'inherit',
-                    }}
+                  <div
+                    className={`matching-row matching-row-b${held ? ' matching-option-held' : ''}`}
+                    key={option.id ?? option.text ?? optionIdx}
                   >
-                    {matched && (
-                      <span style={{ color: 'var(--success-color, #10b981)', fontWeight: 700 }}>
-                        ✓
-                      </span>
-                    )}
-                    {picked && (
-                      <span style={{ color: 'var(--primary-color, #3b82f6)', fontWeight: 700 }}>
-                        ●
-                      </span>
-                    )}
-                    <span
-                      style={{ flex: 1, textDecoration: matched ? 'line-through' : 'none' }}
-                    >
-                      {right.text}
+                    <span className="matching-letter">
+                      {LETTERS[optionIdx % LETTERS.length]}
                     </span>
-                  </button>
+                    <span className="matching-item-text">{option.text}</span>
+                    {held && <span className="matching-used">In use</span>}
+                  </div>
                 );
               })}
             </div>
           </div>
-          {matchedLeftTexts.length > 0 && (
-            <div style={{ marginTop: '0.75rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-              Matched {matchedLeftTexts.length} of{' '}
-              {Math.min(leftItems.length, rightOptions.length)}
-            </div>
-          )}
+          <div className="matching-progress">
+            {matchedCount} of {leftItems.length} items matched
+          </div>
         </div>
       );
     }

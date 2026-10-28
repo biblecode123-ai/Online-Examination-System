@@ -1009,13 +1009,15 @@ export type AdminExamLifecycleAction = 'ready' | 'start' | 'complete' | 'revert-
 /**
  * Input accepted by POST/PATCH /v1/teacher/real-exams (StoreExamRequest).
  * POST requires exam_title, department_id, total_time (1–480) and
- * exam_password (4–100 chars); PATCH accepts any subset. The backend takes a
- * SINGLE department per exam — there is no department_ids field.
+ * exam_password (4–100 chars); PATCH accepts any subset.
+ * The backend now accepts either a single department_id or an array of department_ids
+ * for creating exams across multiple departments.
  */
 export interface AdminExamInput {
   exam_title?: string;
   description?: string | null;
   department_id?: number;
+  department_ids?: number[];
   total_time?: number;
   passing_percentage?: number;
   exam_password?: string;
@@ -1046,6 +1048,11 @@ export interface AdminQuestionInput {
     left_item: string;
     right_item: string;
   }[];
+  /** New format for matching questions with separate Column A and Column B */
+  matching_data?: {
+    left_items: { text: string; correct_option_id: number | null }[];
+    right_options: { text: string }[];
+  };
   instructions?: string;
 }
 

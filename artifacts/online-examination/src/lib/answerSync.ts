@@ -25,48 +25,44 @@ class AnswerSyncService {
    * Load autosave configuration from the server.
    */
   async loadConfig(examId?: number): Promise<AutosaveConfig> {
+    // Shared defaults — also used when the settings endpoint is unreachable.
+    const fallback: AutosaveConfig = {
+      scope: examId ? 'exam' : 'global',
+      scope_id: examId ?? null,
+      time_based_enabled: true,
+      time_interval_seconds: 300,
+      answer_count_enabled: true,
+      answer_count_threshold: 5,
+      max_batch_size: 50,
+      max_concurrent_requests: 1,
+      min_sync_interval_seconds: 30,
+      retry_max_attempts: 5,
+      retry_initial_delay_ms: 1000,
+      retry_max_delay_ms: 30000,
+      active: true,
+    };
     try {
       const response = await fetch(
         `/api/v1/autosave-settings/active?scope=${examId ? 'exam' : 'global'}${examId ? `&scope_id=${examId}` : ''}`
       );
       const data = await response.json();
 
-      if (data.success && data.data) {
-        this.config = data.data.setting;
-        return this.config;
+      if (data.success && data.data?.setting) {
+        // Server payloads may omit scope/scope_id on older records — the
+        // requested scope is always the correct fallback for this load.
+        const setting = { ...fallback, ...data.data.setting } as AutosaveConfig;
+        this.config = setting;
+        return setting;
       }
 
       // Fallback to defaults
-      this.config = {
-        time_based_enabled: true,
-        time_interval_seconds: 300,
-        answer_count_enabled: true,
-        answer_count_threshold: 5,
-        max_batch_size: 50,
-        max_concurrent_requests: 1,
-        min_sync_interval_seconds: 30,
-        retry_max_attempts: 5,
-        retry_initial_delay_ms: 1000,
-        retry_max_delay_ms: 30000,
-        active: true,
-      };
-      return this.config;
+      this.config = fallback;
+      return fallback;
     } catch (error) {
       console.error('Failed to load autosave config:', error);
       // Return safe defaults
-      return {
-        time_based_enabled: true,
-        time_interval_seconds: 300,
-        answer_count_enabled: true,
-        answer_count_threshold: 5,
-        max_batch_size: 50,
-        max_concurrent_requests: 1,
-        min_sync_interval_seconds: 30,
-        retry_max_attempts: 5,
-        retry_initial_delay_ms: 1000,
-        retry_max_delay_ms: 30000,
-        active: true,
-      };
+      this.config = fallback;
+      return fallback;
     }
   }
 

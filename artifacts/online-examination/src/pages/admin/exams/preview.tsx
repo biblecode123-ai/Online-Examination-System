@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Eye, EyeOff, FileText, Timer } from 'lucide-react';
 import { adminExamApi } from '../../../lib/endpoints';
@@ -34,6 +34,207 @@ function instructionText(question: AdminQuestionRow): string {
   if (Array.isArray(question.instructions)) question.instructions.forEach((row) => push(row));
   return [...new Set(rows)].join('\n');
 }
+
+/** One Column A row of a matching board: the item text plus the index of its
+ * correct option in Column B (null while unset). Keyed by index — not text —
+ * so the editor's in-progress form state (empty or duplicate texts) still
+ * highlights the right option. */
+export interface MatchingBoardRow {
+  left: string;
+  correctRightIndex: number | null;
+}
+
+/**
+ * §3 — Matching board as students see it: two separate columns, Column B
+ * may hold more options than Column A (distractors included). The correct
+ * relationships stay hidden until the answer key is toggled — no legacy
+ * `↔ ______` placeholder, no preset instruction text.
+ *
+ * Shared by the exam Preview tab and the question editor's live preview.
+ */
+export function MatchingBoard({
+  rows,
+  rightOptions,
+  showKey,
+  idKey,
+}: {
+  rows: MatchingBoardRow[];
+  rightOptions: string[];
+  showKey: boolean;
+  idKey: string | number;
+}) {
+  if (rows.length === 0 || rightOptions.length === 0) {
+    return (
+      <div className="preview-matching" data-testid={`preview-matching-${idKey}`}>
+        <span className="text-muted">No matching items configured</span>
+      </div>
+    );
+  }
+
+  // Answer-key line: letter the correct option with the same A/B/C the
+  // Column B list shows, so "→ B. Central processing unit" reads as a letter
+  // choice rather than bare text.
+  const keyLabel = (correctRightIndex: number | null): string => {
+    if (correctRightIndex === null || correctRightIndex < 0) return '—';
+    const text = rightOptions[correctRightIndex];
+    if (text === undefined) return '—';
+    return `${LETTERS[correctRightIndex] ?? correctRightIndex + 1}. ${text}`;
+  };
+
+  // Column B rows that are the correct match for some Column A item — tinted
+  // only while the answer key is shown (distractors stay plain).
+  const keyRightIndexes = new Set(
+    showKey
+      ? rows
+          .map((row) => row.correctRightIndex)
+          .filter((index): index is number => index !== null && index >= 0)
+      : [],
+  );
+
+  return (
+    <div
+      className="preview-matching"
+      style={{
+        margin: '0.75rem 0',
+        background: 'var(--bg-subtle, #f8fafc)',
+        padding: '0.75rem 1rem',
+        borderRadius: '6px',
+      }}
+      data-testid={`preview-matching-${idKey}`}
+    >
+      <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'flex-start' }}>
+        <div style={{ flex: 1 }}>
+          <small style={columnLabelStyle}>Column A</small>
+          <ol style={{ margin: '0.4rem 0 0', paddingLeft: '1.25rem', display: 'grid', gap: '0.4rem' }}>
+            {rows.map((row, idx) => (
+              <li key={`${row.left}-${idx}`} style={{ fontSize: '0.9rem' }}>
+                {row.left}
+                {showKey && (
+                  <strong
+                    style={{ color: 'var(--primary, #3b82f6)', marginLeft: '0.5rem' }}
+                    data-testid={`preview-match-key-${idKey}-${idx}`}
+                  >
+                    → {keyLabel(row.correctRightIndex)}
+                  </strong>
+                )}
+              </li>
+            ))}
+          </ol>
+        </div>
+        <div style={{ flex: 1 }}>
+          <small style={columnLabelStyle}>Column B</small>
+          <ul
+            style={{
+              listStyle: 'none',
+              padding: 0,
+              margin: '0.4rem 0 0',
+              display: 'grid',
+              gap: '0.4rem',
+            }}
+          >
+            {rightOptions.map((right, idx) => {
+              const isKey = keyRightIndexes.has(idx);
+              return (
+                <li
+                  key={`${right}-${idx}`}
+                  style={{
+                    fontSize: '0.9rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    padding: '2px 8px',
+                    border: '1px solid transparent',
+                    borderRadius: '6px',
+                    ...(isKey
+                      ? {
+                          background: 'var(--brand-primary-light, #eef2ff)',
+                          borderColor: 'var(--brand-primary, #594fb6)',
+                          fontWeight: 600,
+                        }
+                      : null),
+                  }}
+                  data-testid={
+                    isKey ? `preview-match-key-option-${idKey}-${idx}` : undefined
+                  }
+                >
+                  <span>
+                    {LETTERS[idx] ?? idx + 1}. {right}
+                  </span>
+                  {isKey && (
+                    <em
+                      style={{
+                        marginLeft: 'auto',
+                        fontSize: '0.7rem',
+                        fontStyle: 'normal',
+                        fontWeight: 700,
+                        letterSpacing: '0.04em',
+                        textTransform: 'uppercase',
+                        color: 'var(--brand-primary, #594fb6)',
+                      }}
+                    >
+                      Key
+                    </em>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Preview-tab wrapper: derives the board rows from the staff question row —
+ * new `matching_data` format or legacy `matching_pairs`.
+ */
+function MatchingPreview({
+  question,
+  showKey,
+}: {
+  question: AdminQuestionRow;
+  showKey: boolean;
+}) {
+  const { rows, rightOptions } = useMemo(() => {
+    const data = question.matching_data;
+    if (data?.left_items?.length && data.right_options?.length) {
+      const right = data.right_options.map((opt) => opt.text);
+      return {
+        rightOptions: right,
+        rows: data.left_items.map((item) => ({
+          left: item.text,
+          correctRightIndex: data.right_options.findIndex(
+            (opt) => opt.id === item.correct_option_id,
+          ),
+        })),
+      };
+    }
+    // Legacy pairs: derive both columns from the saved pairs.
+    const pairs = question.matching_pairs ?? [];
+    const right = [...new Set(pairs.map((pair) => pair.right_item))];
+    return {
+      rightOptions: right,
+      rows: pairs.map((pair) => ({
+        left: pair.left_item,
+        correctRightIndex: right.indexOf(pair.right_item),
+      })),
+    };
+  }, [question]);
+
+  return (
+    <MatchingBoard rows={rows} rightOptions={rightOptions} showKey={showKey} idKey={question.id} />
+  );
+}
+
+const columnLabelStyle: CSSProperties = {
+  fontWeight: 600,
+  color: 'var(--text-muted)',
+  display: 'block',
+  textTransform: 'uppercase',
+  fontSize: '0.72rem',
+  letterSpacing: '0.04em',
+};
 
 /**
  * Admin preview — renders the exact questions/options students will receive
@@ -165,50 +366,7 @@ export function PreviewTab({ exam }: { exam: AdminRealExam }) {
               )}
 
               {question.question_type === 'matching' ? (
-                <div
-                  className="preview-matching"
-                  style={{
-                    margin: '0.75rem 0',
-                    background: 'var(--bg-subtle, #f8fafc)',
-                    padding: '0.75rem 1rem',
-                    borderRadius: '6px',
-                  }}
-                  data-testid={`preview-matching-${question.id}`}
-                >
-                  <small
-                    style={{
-                      fontWeight: 600,
-                      color: 'var(--text-muted)',
-                      display: 'block',
-                      marginBottom: '0.5rem',
-                    }}
-                  >
-                    Matching Pairs:
-                  </small>
-                  {question.matching_pairs && question.matching_pairs.length > 0 ? (
-                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: '0.4rem' }}>
-                      {question.matching_pairs.map((mp, mpIdx) => (
-                        <li
-                          key={mp.id ?? mpIdx}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.5rem',
-                            fontSize: '0.9rem',
-                          }}
-                        >
-                          <span style={{ fontWeight: 500 }}>{mp.left_item}</span>
-                          <span style={{ color: 'var(--text-muted)' }}>↔</span>
-                          <span style={{ color: showKey ? 'var(--primary, #3b82f6)' : 'inherit', fontWeight: showKey ? 600 : 400 }}>
-                            {showKey ? mp.right_item : '_______________'}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <span className="text-muted">No matching pairs configured</span>
-                  )}
-                </div>
+                <MatchingPreview question={question} showKey={showKey} />
               ) : (question.options ?? []).length > 0 ? (
                 <ul className="q-options">
                   {(question.options ?? []).map((option, optionIndex) => (

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'wouter';
 import { BarChart3, CheckCircle2, Clock } from 'lucide-react';
 import { adminApi, adminExamApi } from '../../../lib/endpoints';
+import { useAuth } from '../../../lib/auth';
 import { EmptyState, ErrorBox, LoadingBlock, Status } from '../../../components/shell';
 import { fmtDate, fmtMinutes } from './logic';
 import type { AdminRealExam, AdminResultRow } from '../../../lib/types';
@@ -22,6 +23,10 @@ const FILTERS: { value: AttemptFilter; label: string }[] = [
 export function ResultsTab({ exam }: { exam: AdminRealExam }) {
   const [filter, setFilter] = useState<AttemptFilter>('');
   const [page, setPage] = useState(1);
+  // The same tab renders for admins (/admin/exams/:id) and teachers
+  // (/teacher/exams/:id) — attempt details live under the matching role root.
+  const { user } = useAuth();
+  const resultsBase = user?.role_slug === 'teacher' ? '/teacher/results' : '/admin/results';
 
   const attemptsQuery = useQuery({
     queryKey: ['admin-exam-attempts', exam.id, filter, page],
@@ -111,7 +116,7 @@ export function ResultsTab({ exam }: { exam: AdminRealExam }) {
                     <th>Attempt</th>
                     <th>Student</th>
                     <th>Status</th>
-                    <th className="num">Marks</th>
+                    <th className="num">Total Marks</th>
                     <th className="num">Score</th>
                     <th className="num">Correct</th>
                     <th>Started</th>
@@ -124,23 +129,30 @@ export function ResultsTab({ exam }: { exam: AdminRealExam }) {
                     const status = (attempt.status ?? '').toLowerCase();
                     const ongoing = status === 'ongoing' || status === 'in_progress' || status === 'active';
                     const marks = marksById.get(attempt.id);
-                    // The attempts endpoint returns `score` as the percentage
-                    // (verified: 66.67 for 2/3 marks) but no `percentage` field,
-                    // so fall back to it and always label it as a percentage.
-                    const percentage =
-                      marks?.percentage ??
-                      (attempt.score != null && attempt.score !== ('' as never)
-                        ? Number(attempt.score)
-                        : null);
+                    // Spec §1–§3: Marks = the exam's total possible points, Score =
+                    // earned / possible, Correct = correct answers / total questions.
+                    // Percentages are deliberately NOT shown (§2), so the attempts
+                    // endpoint's `score` (which holds a percentage) is never rendered.
                     const earned = marks?.marks_obtained ?? null;
                     const possible = marks?.max_marks ?? null;
                     const correct = marks?.correct_answers ?? attempt.correct_answers;
                     const totalQ = marks?.total_questions ?? attempt.total_questions;
+                    // §4: earned marks must never exceed the question's maximum points.
+                    // A row that does is flagged rather than displayed as fact.
+                    const marksExceed =
+                      earned != null && possible != null && earned > possible;
+                    const flagged = marksExceed;
                     return (
-                      <tr key={attempt.id} data-testid={`row-attempt-${attempt.id}`}>
+                      <tr key={attempt.id} data-testid={`row-attempt-${attempt.id}`} data-flagged={flagged || undefined}>
                         <td className="num">#{attempt.id}</td>
                         <td>
-                          {attempt.student?.name ?? `Student #${attempt.student_id ?? '?'}`}
+                          <Link
+                            href={`${resultsBase}/${attempt.id}`}
+                            className="text-link"
+                            data-testid={`link-student-${attempt.id}`}
+                          >
+                            {attempt.student?.name ?? `Student #${attempt.student_id ?? '?'}`}
+                          </Link>
                           {attempt.student?.email && (
                             <small className="row-subtext">{attempt.student.email}</small>
                           )}
@@ -153,12 +165,17 @@ export function ResultsTab({ exam }: { exam: AdminRealExam }) {
                         <td className="num" data-testid={`row-marks-${attempt.id}`}>
                           <strong>{possible != null ? possible : '—'}</strong>
                         </td>
-                        <td className="num">
+                        <td className="num" data-testid={`row-score-${attempt.id}`}>
                           <strong>
                             {earned != null && possible != null
                               ? `${earned} / ${possible}`
                               : '—'}
                           </strong>
+                          {marksExceed && (
+                            <em className="marks-flag-mark" title="Earned marks exceed the possible marks on this attempt.">
+                              !
+                            </em>
+                          )}
                         </td>
                         <td className="num">
                           <strong>
@@ -222,10 +239,12 @@ export function ResultsTab({ exam }: { exam: AdminRealExam }) {
         )}
 
         <small className="field-hint form-footnote">
-          Marks: total possible points (sum of all question points) · Score: earned marks / total marks ·
-          Correct: correct answers / total questions · Duration {fmtMinutes(exam.total_time)} · passing{' '}
-          {exam.passing_percentage ?? '—'}% · grading and detailed breakdowns are server-computed
-          in <Link href="/admin/results">Results</Link>.
+          Total Marks: the exam's total possible points (sum of every question's points) · Score:
+          earned marks / total possible marks · Correct: correct answers / total questions
+          (independent of point values) · a <em className="marks-flag-mark" aria-hidden="true">!</em>{' '}
+          marks earned above the possible total — server data needing correction · Duration{' '}
+          {fmtMinutes(exam.total_time)} · passing {exam.passing_percentage ?? '—'}% · grading and
+          detailed breakdowns are server-computed in <Link href="/admin/results">Results</Link>.
           {exam.ongoing_attempts ? (
             <>
               {' '}

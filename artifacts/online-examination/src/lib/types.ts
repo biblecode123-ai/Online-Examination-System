@@ -150,8 +150,11 @@ export interface QuestionPayload {
   instructions?: string | null;
   multiple_correct?: boolean;
   passage?: { id: number; title?: string | null; content?: string | null } | null;
+  /** Legacy flat pairs — still sent for old matching questions; new
+   *  questions use `matching_data` (separate Column A / Column B). */
+  matching_pairs?: { id?: number; left_item: string; right_item: string }[];
   matching_data?: {
-    left_items: { id: number; text: string }[];
+    left_items: { id: number; text: string; correct_option_id: number | null }[];
     right_options: { id: number; text: string }[];
   } | null;
 }
@@ -409,6 +412,13 @@ export interface ResultQuestionReview {
   correct_answer: { option_id?: number | null; option_text?: string | null };
   options: { id: number; text: string; is_correct?: boolean }[];
   explanation?: string | null;
+  /** Present only when the endpoint carries it (BACKEND_PATCH §3d-6): the
+   *  matching question's two columns, letting review rows letter and highlight
+   *  answers with the A/B/C the student actually saw. */
+  matching_data?: {
+    left_items: { text: string; correct_option_id: number | string | null }[];
+    right_options: { id: number | string; text: string }[];
+  } | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -679,6 +689,11 @@ export interface AdminQuestionRow {
   options?: AdminQuestionOptionFull[];
   passage?: { id: number; title?: string | null; content?: string | null } | null;
   matching_pairs?: { id?: number; left_item: string; right_item: string }[];
+  /** New format for matching questions with separate Column A and Column B */
+  matching_data?: {
+    left_items: { id: number; text: string; correct_option_id: number | null }[];
+    right_options: { id: number; text: string }[];
+  } | null;
   /** Question-level instructions only — present on the LIST endpoint. */
   instructions?: AdminInstructionRow[];
   /** Question + passage + section instructions, ordered — present on the

@@ -1,0 +1,79 @@
+
+> @workspace/ofijan-examflow@0.0.0 dev
+> vite --config vite.config.ts --host 0.0.0.0 --port 3010 --strictPort
+
+[vite.config] Ignoring invalid PORT value "0"; using 3000 instead.
+
+  [32m[1mVITE[22m v7.3.6[39m  [2mready in [0m[1m17927[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m3010[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://192.168.137.1:[1m3010[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://10.215.30.89:[1m3010[22m/[39m
+[2m3:25:21 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/pages/admin/exams/questions.tsx[22m
+[2m3:25:23 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [33mhmr invalidate [39m[2m/src/pages/admin/exams/questions.tsx[22m Could not Fast Refresh ("SIMULATION_EXAMPLES" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+[2m3:25:23 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/admin/exams/detail.tsx[22m
+[2m3:29:22 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/pages/admin/exams/questions.tsx[22m
+[2m3:29:23 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [33mhmr invalidate [39m[2m/src/pages/admin/exams/questions.tsx[22m Could not Fast Refresh ("SIMULATION_EXAMPLES" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+[2m3:29:23 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/admin/exams/detail.tsx[22m
+[2m3:45:55 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/components/AdminShell.tsx, /src/pages/submission.tsx, /src/components/TeacherShell.tsx, /src/pages/exams.tsx, /src/pages/results.tsx, /src/pages/dashboard.tsx, /src/pages/history.tsx, /src/pages/admin/result-detail.tsx, /src/pages/exam-details.tsx, /src/pages/admin/results.tsx, /src/pages/attempt.tsx, /src/index.css[22m
+[2m3:46:36 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/pages/admin/exams/preview.tsx[22m
+[2m3:47:45 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/admin/result-detail.tsx, /src/index.css[22m
+[2m3:48:14 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/admin/results.tsx, /src/index.css[22m
+[2m3:49:15 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/admin/results.tsx, /src/index.css[22m
+[2m3:49:52 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/results.tsx, /src/index.css[22m
+[2m3:50:41 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/results.tsx, /src/index.css[22m
+[2m3:50:41 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/admin/results.tsx, /src/index.css[22m
+[2m4:57:51 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/pages/admin/exams/preview.tsx[22m
+[2m5:25:38 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/pages/admin/exams/preview.tsx[22m
+[2m5:25:49 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [33mhmr invalidate [39m[2m/src/pages/admin/exams/preview.tsx[22m Could not Fast Refresh (new export)
+[2m5:25:49 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/admin/exams/detail.tsx[22m
+[2m5:26:24 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/pages/admin/exams/questions.tsx[22m
+[2m5:26:24 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [33mhmr invalidate [39m[2m/src/pages/admin/exams/questions.tsx[22m Could not Fast Refresh ("SIMULATION_EXAMPLES" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+[2m5:26:24 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/admin/exams/detail.tsx[22m
+[2m5:55:55 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/pages/admin/exams/questions.tsx[22m
+[2m6:24:22 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/pages/admin/exams/questions.tsx[22m
+[2m6:24:26 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [33mhmr invalidate [39m[2m/src/pages/admin/exams/questions.tsx[22m Could not Fast Refresh ("SIMULATION_EXAMPLES" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+[2m6:24:26 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/admin/exams/detail.tsx[22m
+[2m6:40:27 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m6:57:13 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m6:57:14 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/components/AdminShell.tsx, /src/pages/submission.tsx, /src/components/TeacherShell.tsx, /src/pages/exams.tsx, /src/pages/results.tsx, /src/pages/dashboard.tsx, /src/pages/history.tsx, /src/pages/admin/result-detail.tsx, /src/pages/exam-details.tsx, /src/pages/admin/results.tsx, /src/pages/attempt.tsx, /src/index.css[22m
+[2m6:58:45 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/results.tsx, /src/index.css[22m
+[2m6:58:47 AM[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to resolve import "../admin/exams/preview" from "src/pages/results.tsx". Does the file exist?[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mC:/Users/PC/Documents/Online-Examination-System/artifacts/online-examination/src/pages/results.tsx[39m:5:53
+[33m  6  |  import { EmptyState, ErrorBox, LoadingBlock, Metric, PageTitle, Status } from "../components/shell";
+  7  |  import { dateLabel, formatMatchingAnswer, parseMatchingAnswer } from "../lib/format";
+  8  |  import { MatchingBoard } from "../admin/exams/preview";
+     |                                 ^
+  9  |  import { isFinishedAttempt } from "../lib/examState";
+  10 |  import { useExams, useMyAttempts, useResult } from "../lib/queries";[39m
+      at TransformPluginContext._formatLog (file:///C:/Users/PC/Documents/Online-Examination-System/node_modules/.pnpm/vite@7.3.6_@types+node@25.9_4aa3f31c6ec2040a2842a601e7a4a735/node_modules/vite/dist/node/chunks/config.js:29079:43)
+      at TransformPluginContext.error (file:///C:/Users/PC/Documents/Online-Examination-System/node_modules/.pnpm/vite@7.3.6_@types+node@25.9_4aa3f31c6ec2040a2842a601e7a4a735/node_modules/vite/dist/node/chunks/config.js:29076:14)
+      at normalizeUrl (file:///C:/Users/PC/Documents/Online-Examination-System/node_modules/.pnpm/vite@7.3.6_@types+node@25.9_4aa3f31c6ec2040a2842a601e7a4a735/node_modules/vite/dist/node/chunks/config.js:27199:18)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async file:///C:/Users/PC/Documents/Online-Examination-System/node_modules/.pnpm/vite@7.3.6_@types+node@25.9_4aa3f31c6ec2040a2842a601e7a4a735/node_modules/vite/dist/node/chunks/config.js:27257:32
+      at async Promise.all (index 5)
+      at async TransformPluginContext.transform (file:///C:/Users/PC/Documents/Online-Examination-System/node_modules/.pnpm/vite@7.3.6_@types+node@25.9_4aa3f31c6ec2040a2842a601e7a4a735/node_modules/vite/dist/node/chunks/config.js:27225:4)
+      at async EnvironmentPluginContainer.transform (file:///C:/Users/PC/Documents/Online-Examination-System/node_modules/.pnpm/vite@7.3.6_@types+node@25.9_4aa3f31c6ec2040a2842a601e7a4a735/node_modules/vite/dist/node/chunks/config.js:28877:14)
+      at async loadAndTransform (file:///C:/Users/PC/Documents/Online-Examination-System/node_modules/.pnpm/vite@7.3.6_@types+node@25.9_4aa3f31c6ec2040a2842a601e7a4a735/node_modules/vite/dist/node/chunks/config.js:22746:26)
+      at async viteTransformMiddleware (file:///C:/Users/PC/Documents/Online-Examination-System/node_modules/.pnpm/vite@7.3.6_@types+node@25.9_4aa3f31c6ec2040a2842a601e7a4a735/node_modules/vite/dist/node/chunks/config.js:24622:20)
+[2m6:58:47 AM[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to resolve import "../admin/exams/preview" from "src/pages/results.tsx". Does the file exist?[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mC:/Users/PC/Documents/Online-Examination-System/artifacts/online-examination/src/pages/results.tsx[39m:5:53
+[33m  6  |  import { EmptyState, ErrorBox, LoadingBlock, Metric, PageTitle, Status } from "../components/shell";
+  7  |  import { dateLabel, formatMatchingAnswer, parseMatchingAnswer } from "../lib/format";
+  8  |  import { MatchingBoard } from "../admin/exams/preview";
+     |                                 ^
+  9  |  import { isFinishedAttempt } from "../lib/examState";
+  10 |  import { useExams, useMyAttempts, useResult } from "../lib/queries";[39m
+      at TransformPluginContext._formatLog (file:///C:/Users/PC/Documents/Online-Examination-System/node_modules/.pnpm/vite@7.3.6_@types+node@25.9_4aa3f31c6ec2040a2842a601e7a4a735/node_modules/vite/dist/node/chunks/config.js:29079:43)
+      at TransformPluginContext.error (file:///C:/Users/PC/Documents/Online-Examination-System/node_modules/.pnpm/vite@7.3.6_@types+node@25.9_4aa3f31c6ec2040a2842a601e7a4a735/node_modules/vite/dist/node/chunks/config.js:29076:14)
+      at normalizeUrl (file:///C:/Users/PC/Documents/Online-Examination-System/node_modules/.pnpm/vite@7.3.6_@types+node@25.9_4aa3f31c6ec2040a2842a601e7a4a735/node_modules/vite/dist/node/chunks/config.js:27199:18)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async file:///C:/Users/PC/Documents/Online-Examination-System/node_modules/.pnpm/vite@7.3.6_@types+node@25.9_4aa3f31c6ec2040a2842a601e7a4a735/node_modules/vite/dist/node/chunks/config.js:27257:32
+      at async Promise.all (index 5)
+      at async TransformPluginContext.transform (file:///C:/Users/PC/Documents/Online-Examination-System/node_modules/.pnpm/vite@7.3.6_@types+node@25.9_4aa3f31c6ec2040a2842a601e7a4a735/node_modules/vite/dist/node/chunks/config.js:27225:4)
+      at async EnvironmentPluginContainer.transform (file:///C:/Users/PC/Documents/Online-Examination-System/node_modules/.pnpm/vite@7.3.6_@types+node@25.9_4aa3f31c6ec2040a2842a601e7a4a735/node_modules/vite/dist/node/chunks/config.js:28877:14)
+      at async loadAndTransform (file:///C:/Users/PC/Documents/Online-Examination-System/node_modules/.pnpm/vite@7.3.6_@types+node@25.9_4aa3f31c6ec2040a2842a601e7a4a735/node_modules/vite/dist/node/chunks/config.js:22746:26)
+      at async viteTransformMiddleware (file:///C:/Users/PC/Documents/Online-Examination-System/node_modules/.pnpm/vite@7.3.6_@types+node@25.9_4aa3f31c6ec2040a2842a601e7a4a735/node_modules/vite/dist/node/chunks/config.js:24622:20)
+[2m7:00:31 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/index.css[22m

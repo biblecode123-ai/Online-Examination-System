@@ -380,6 +380,9 @@ function RouterRoot() {
           <Route path="/teacher/exams/:id" component={AdminExamDetail} />
           <Route path="/teacher/assignments" component={TeacherAssignments} />
           <Route path="/teacher/grading" component={TeacherGrading} />
+          {/* Attempt details reuse the admin result-detail view; the backend
+              authorizes teachers to results they manage. */}
+          <Route path="/teacher/results/:attemptId" component={AdminResultDetail} />
           <Route path="/teacher/profile" component={Profile} />
           <Route path="/teacher/:rest*" component={TeacherDashboard} />
           <Route component={NotFound} />

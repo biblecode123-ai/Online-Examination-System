@@ -23,8 +23,12 @@ interface AnswerDBSchema extends DBSchema {
     value: PendingAnswer;
     indexes: {
       'by-attempt': number;
-      'by-synced': [number, boolean];
       'by-timestamp': number;
+      // Note: there is deliberately no index over `synced`. IndexedDB keys
+      // must be number/string/Date/binary — a boolean is not a valid key, so
+      // a compound ['attemptId', 'synced'] index can never be queried (the
+      // read throws DataError). Unsynced answers are filtered in memory by
+      // getUnsyncedAnswers() instead.
     };
   };
 }
@@ -53,7 +57,6 @@ class AnswerPersistenceService {
             });
 
             store.createIndex('by-attempt', 'attemptId');
-            store.createIndex('by-synced', ['attemptId', 'synced']);
             store.createIndex('by-timestamp', 'timestamp');
           },
         });
@@ -114,7 +117,11 @@ class AnswerPersistenceService {
   async getUnsyncedAnswers(attemptId: number): Promise<PendingAnswer[]> {
     try {
       const db = await this.init();
-      return await db.getAllFromIndex('answers', 'by-synced', [attemptId, false]);
+      // Indexed via 'by-attempt' (boolean values cannot be index keys — see
+      // the schema note), then filtered in memory: an attempt holds at most
+      // one record per question.
+      const answers = await db.getAllFromIndex('answers', 'by-attempt', attemptId);
+      return answers.filter((answer) => !answer.synced);
     } catch (error) {
       console.error('Failed to get unsynced answers:', error);
       return [];

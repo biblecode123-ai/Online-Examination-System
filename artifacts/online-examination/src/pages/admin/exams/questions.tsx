@@ -27,6 +27,7 @@ import {
   fmtDate,
   questionTotalMarks,
 } from './logic';
+import { MatchingBoard } from './preview';
 import type { AdminQuestionRow, AdminRealExam } from '../../../lib/types';
 
 interface OptionDraft {
@@ -39,6 +40,17 @@ interface MatchingPairDraft {
   right: string;
 }
 
+interface ColumnAItem {
+  id: string | number;
+  text: string;
+  correct_option_id: string | number | null;
+}
+
+interface ColumnBOption {
+  id: string | number;
+  text: string;
+}
+
 interface QuestionFormState {
   question_text: string;
   question_type: string;
@@ -49,6 +61,8 @@ interface QuestionFormState {
   instructions: string;
   options: OptionDraft[];
   matching_pairs: MatchingPairDraft[];
+  column_a_items: ColumnAItem[];
+  column_b_options: ColumnBOption[];
   multiple_correct?: boolean;
 }
 
@@ -141,10 +155,18 @@ export const SIMULATION_EXAMPLES = [
       answer: '',
       passage_id: '',
           options: [],
-      matching_pairs: [
-        { left: 'Mitochondria', right: 'Energy production (ATP synthesis)' },
-        { left: 'Ribosomes', right: 'Protein synthesis (translation)' },
-        { left: 'Chloroplasts', right: 'Photosynthesis (light energy conversion)' },
+      matching_pairs: [],
+      column_a_items: [
+        { id: 'col-a-0', text: 'Mitochondria', correct_option_id: 'col-b-0' },
+        { id: 'col-a-1', text: 'Ribosomes', correct_option_id: 'col-b-1' },
+        { id: 'col-a-2', text: 'Chloroplasts', correct_option_id: 'col-b-2' },
+      ],
+      column_b_options: [
+        { id: 'col-b-0', text: 'Energy production (ATP synthesis)' },
+        { id: 'col-b-1', text: 'Protein synthesis (translation)' },
+        { id: 'col-b-2', text: 'Photosynthesis (light energy conversion)' },
+        { id: 'col-b-3', text: 'Lipid metabolism' },
+        { id: 'col-b-4', text: 'DNA replication' },
       ],
     },
   },
@@ -206,6 +228,8 @@ const EMPTY_FORM: QuestionFormState = {
     { left: '', right: '' },
     { left: '', right: '' },
   ],
+  column_a_items: [],
+  column_b_options: [],
 };
 
 /**
@@ -240,8 +264,40 @@ function formFromQuestion(q: AdminQuestionRow): QuestionFormState {
   const instructions = questionInstructionText(q);
 
   let matchingPairs: MatchingPairDraft[] = [];
-  if (q.matching_pairs && q.matching_pairs.length > 0) {
+  let columnAItems: ColumnAItem[] = [];
+  let columnBOptions: ColumnBOption[] = [];
+
+  // Try to load new Column A/Column B format first
+  if (q.matching_data?.left_items && q.matching_data?.right_options) {
+    // Normalise ids to strings: <select> values are always strings, so a
+    // numeric backend id would stop matching the moment an answer changes.
+    columnAItems = q.matching_data.left_items.map((item, idx) => ({
+      id: String(item.id ?? `col-a-${idx}`),
+      text: item.text,
+      correct_option_id: item.correct_option_id == null ? null : String(item.correct_option_id),
+    }));
+    columnBOptions = q.matching_data.right_options.map((opt, idx) => ({
+      id: String(opt.id ?? `col-b-${idx}`),
+      text: opt.text,
+    }));
+  } else if (q.matching_pairs && q.matching_pairs.length > 0) {
+    // Legacy format: convert pairs to new format
     matchingPairs = q.matching_pairs.map((mp) => ({ left: mp.left_item, right: mp.right_item }));
+    // Convert to Column A/Column B format
+    const usedRightItems = new Set<string>();
+    columnAItems = q.matching_pairs.map((mp, idx) => {
+      const rightText = mp.right_item;
+      usedRightItems.add(rightText);
+      return {
+        id: `col-a-${idx}`,
+        text: mp.left_item,
+        correct_option_id: `col-b-${q.matching_pairs?.findIndex(p => p.right_item === rightText) ?? idx}`,
+      };
+    });
+    columnBOptions = q.matching_pairs.map((mp, idx) => ({
+      id: `col-b-${idx}`,
+      text: mp.right_item,
+    }));
   } else if (q.question_type === 'matching' && q.answer) {
     try {
       const parsed = JSON.parse(q.answer);
@@ -250,12 +306,29 @@ function formFromQuestion(q: AdminQuestionRow): QuestionFormState {
           left,
           right: String(right),
         }));
+        // Convert to Column A/Column B format
+        const entries = Object.entries(parsed);
+        const usedRightItems = new Set<string>();
+        columnAItems = entries.map(([left, right], idx) => {
+          usedRightItems.add(String(right));
+          return {
+            id: `col-a-${idx}`,
+            text: left,
+            correct_option_id: `col-b-${entries.findIndex(([, r]) => r === right)}`,
+          };
+        });
+        columnBOptions = entries.map(([, right], idx) => ({
+          id: `col-b-${idx}`,
+          text: String(right),
+        }));
       }
     } catch {
       // ignore
     }
   }
-  if (matchingPairs.length < 2) {
+
+  // Initialize with defaults if empty
+  if (columnAItems.length === 0 && columnBOptions.length === 0) {
     matchingPairs = [
       { left: '', right: '' },
       { left: '', right: '' },
@@ -279,8 +352,17 @@ function formFromQuestion(q: AdminQuestionRow): QuestionFormState {
     instructions: instructions ?? '',
     options,
     matching_pairs: matchingPairs,
+    column_a_items: columnAItems,
+    column_b_options: columnBOptions,
   };
 }
+
+/** Matching questions have no editable question text — the editor hides the
+ * field and the Column A / Column B board carries the prompt — but the backend
+ * still requires a non-empty `question_text`, so saves fall back to this line.
+ */
+const MATCHING_TEXT_FALLBACK =
+  'Match each item in Column A with the correct option in Column B.';
 
 /** Translate the form state into the backend's verified store/update payload.
  *
@@ -293,8 +375,9 @@ function toPayload(
   form: QuestionFormState,
   examId: number | null,
 ): { payload: AdminQuestionInput; error?: string } {
+  const isMatching = form.question_type === 'matching';
   const text = form.question_text.trim();
-  if (form.question_type !== 'matching' && !text)
+  if (!text && !isMatching)
     return { payload: {} as AdminQuestionInput, error: 'Question text is required.' };
   const points = Number(form.points);
   if (!Number.isFinite(points) || points <= 0 || !Number.isInteger(points))
@@ -302,7 +385,7 @@ function toPayload(
 
   const base: AdminQuestionInput = {
     question_type: form.question_type,
-    question_text: text,
+    question_text: text || MATCHING_TEXT_FALLBACK,
     points,
   };
   if (examId !== null) base.exam_id = examId;
@@ -336,20 +419,71 @@ function toPayload(
       is_correct: value === (correct.text === 'True'),
     }));
   } else if (form.question_type === 'matching') {
-    const validPairs = form.matching_pairs.filter((p) => p.left.trim() && p.right.trim());
-    if (validPairs.length < 2) {
+    // New Column A/Column B format
+    const validColumnA = form.column_a_items.filter((item) => item.text.trim());
+    const validColumnB = form.column_b_options.filter((opt) => opt.text.trim());
+
+    if (validColumnA.length < 2) {
       return {
         payload: {} as AdminQuestionInput,
-        error: 'Matching questions require at least two complete pairs (Left and Right items).',
+        error: 'Matching questions require at least two items in Column A.',
       };
     }
-    base.matching_pairs = validPairs.map((p) => ({
-      left_item: p.left.trim(),
-      right_item: p.right.trim(),
-    }));
+    if (validColumnB.length < 2) {
+      return {
+        payload: {} as AdminQuestionInput,
+        error: 'Matching questions require at least two options in Column B.',
+      };
+    }
+
+    // Validate that each Column A item has a correct option assigned.
+    // `== null` covers null/undefined — a numeric id of 0 (first Column B
+    // option) is a set answer, not a missing one.
+    const missingCorrectOptions = validColumnA.filter(
+      (item) => item.correct_option_id == null || item.correct_option_id === '',
+    );
+    if (missingCorrectOptions.length > 0) {
+      return {
+        payload: {} as AdminQuestionInput,
+        error: 'Each item in Column A must have a correct answer selected from Column B.',
+      };
+    }
+
+    // Create new matching_data format.
+    // String-normalised comparison: select values are strings even when the
+    // option ids are numbers — a strict === would miss and store index -1.
+    base.matching_data = {
+      left_items: validColumnA.map((item) => ({
+        text: item.text.trim(),
+        correct_option_id: validColumnB.findIndex(
+          (opt) => String(opt.id) === String(item.correct_option_id),
+        ),
+      })),
+      right_options: validColumnB.map((opt) => ({
+        text: opt.text.trim(),
+      })),
+    };
+
+    // Also create legacy matching_pairs for backward compatibility
+    base.matching_pairs = validColumnA.map((item) => {
+      const correctOption = validColumnB.find(
+        (opt) => String(opt.id) === String(item.correct_option_id),
+      );
+      return {
+        left_item: item.text.trim(),
+        right_item: correctOption?.text.trim() ?? '',
+      };
+    });
+
+    // Store the answer as a map of left text to right text
     const pairsMap: Record<string, string> = {};
-    validPairs.forEach((p) => {
-      pairsMap[p.left.trim()] = p.right.trim();
+    validColumnA.forEach((item) => {
+      const correctOption = validColumnB.find(
+        (opt) => String(opt.id) === String(item.correct_option_id),
+      );
+      if (correctOption) {
+        pairsMap[item.text.trim()] = correctOption.text.trim();
+      }
     });
     base.answer = JSON.stringify(pairsMap);
   } else if (form.question_type === 'blank') {
@@ -465,8 +599,10 @@ function QuestionDialog({
     if (newType === form.question_type) return;
     const hasOptions = form.options.some((o) => o.text.trim());
     const hasPairs = form.matching_pairs.some((p) => p.left.trim() || p.right.trim());
+    const hasColumnA = form.column_a_items.some((item) => item.text.trim());
+    const hasColumnB = form.column_b_options.some((opt) => opt.text.trim());
     const hasBlank = Boolean(form.answer.trim());
-    if ((hasOptions || hasPairs || hasBlank) && editing) {
+    if ((hasOptions || hasPairs || hasColumnA || hasColumnB || hasBlank) && editing) {
       if (
         !window.confirm(
           `Switching question type to "${QUESTION_TYPE_LABEL[newType] ?? newType}" will replace incompatible answer configuration. Proceed?`,
@@ -478,6 +614,10 @@ function QuestionDialog({
     setForm((prev) => ({
       ...prev,
       question_type: newType,
+      // Matching hides the text field — drop any stale prompt from the previous
+      // type so it can't be saved invisibly; a fresh save then uses the
+      // fallback line. Existing matching questions keep their loaded text.
+      question_text: newType === 'matching' ? '' : prev.question_text,
       options:
         newType === 'multiple_choice' && prev.options.length === 0
           ? [
@@ -492,6 +632,20 @@ function QuestionDialog({
               { left: '', right: '' },
             ]
           : prev.matching_pairs,
+      column_a_items:
+        newType === 'matching' && prev.column_a_items.length === 0
+          ? [
+              { id: 'col-a-0', text: '', correct_option_id: null },
+              { id: 'col-a-1', text: '', correct_option_id: null },
+            ]
+          : prev.column_a_items,
+      column_b_options:
+        newType === 'matching' && prev.column_b_options.length === 0
+          ? [
+              { id: 'col-b-0', text: '' },
+              { id: 'col-b-1', text: '' },
+            ]
+          : prev.column_b_options,
     }));
   };
 
@@ -504,6 +658,30 @@ function QuestionDialog({
   // reads naturally — matching and blank questions are pair/text exercises.
   // Any values already set are preserved in state and sent with the payload.
   const showSharedMedia = !isMatching && !isBlank;
+
+  // Live matching preview: the current form state rendered through the same
+  // board the exam Preview tab uses. The answer key is always shown here —
+  // this is the authoring surface where the teacher is setting the answers.
+  // Empty rows get placeholder labels so the board stays readable while typing.
+  const matchingPreview = {
+    rows: form.column_a_items.map((item, index) => {
+      // `!== null` checks, not truthiness: a numeric id of 0 (Column B's first
+      // option) is a valid, set answer.
+      const matchIndex =
+        item.correct_option_id !== null && item.correct_option_id !== undefined
+          ? form.column_b_options.findIndex(
+              (opt) => String(opt.id) === String(item.correct_option_id),
+            )
+          : -1;
+      return {
+        left: item.text.trim() || `Item ${index + 1}`,
+        correctRightIndex: matchIndex >= 0 ? matchIndex : null,
+      };
+    }),
+    rightOptions: form.column_b_options.map(
+      (opt, index) => opt.text.trim() || `Option ${index + 1}`,
+    ),
+  };
 
   // Searchable passage picker: filter by title or content, capped for perf.
   const filteredPassages = useMemo(() => {
@@ -651,18 +829,20 @@ function QuestionDialog({
               />
             </div>
 
-{!isMatching && (
-            <div className="form-group span-2">
-              <label htmlFor="q-text">Question text</label>
-              <textarea
-                id="q-text"
-                rows={3}
-                value={form.question_text}
-                onChange={(e) => setForm({ ...form, question_text: e.target.value })}
-                data-testid="textarea-question-text"
-              />
-            </div>
-          )}
+            {/* Matching questions carry their prompt through the Column A/B
+                board instead — no free-text field. */}
+            {!isMatching && (
+              <div className="form-group span-2">
+                <label htmlFor="q-text">Question text</label>
+                <textarea
+                  id="q-text"
+                  rows={3}
+                  value={form.question_text}
+                  onChange={(e) => setForm({ ...form, question_text: e.target.value })}
+                  data-testid="textarea-question-text"
+                />
+              </div>
+            )}
 
 
 
@@ -932,7 +1112,7 @@ function QuestionDialog({
               </div>
             )}
 
-            {/* ─── Matching Pairs ─── */}
+            {/* ─── Matching: Column A / Column B ─── */}
             {isMatching && (
               <div className="form-group span-2">
                 <div
@@ -943,68 +1123,193 @@ function QuestionDialog({
                     marginBottom: '0.5rem',
                   }}
                 >
-                  <label style={{ margin: 0 }}>Matching pairs (Left Item ↔ Right Match)</label>
-                  <button
-                    type="button"
-                    className="button button-quiet button-sm"
-                    onClick={() =>
-                      setForm((prev) => ({
-                        ...prev,
-                        matching_pairs: [...prev.matching_pairs, { left: '', right: '' }],
-                      }))
-                    }
-                    data-testid="button-add-matching-pair"
-                  >
-                    <Plus size={14} /> Add pair
-                  </button>
+                  <label style={{ margin: 0 }}>Matching Question — Column A & Column B</label>
                 </div>
-                <small className="field-hint" style={{ display: 'block', marginBottom: '0.75rem' }}>
-                  Enter each item on the left and its matching partner on the right. Students will see the
-                  right matches shuffled.
+                <small className="field-hint" style={{ display: 'block', marginBottom: '1rem' }}>
+                  Column A contains items students must match. Column B contains options including distractors.
+                  Column B can have more options than Column A.
                 </small>
-                <div className="matching-pairs-editor" data-testid="matching-pairs-editor">
-                  {form.matching_pairs.map((pair, index) => (
-                    <div key={index} className="matching-pair-row">
-                      <input
-                        type="text"
-                        placeholder={`Left Item ${index + 1} (e.g. Mitochondria)`}
-                        value={pair.left}
-                        onChange={(e) => {
-                          const next = [...form.matching_pairs];
-                          next[index] = { ...next[index], left: e.target.value };
-                          setForm({ ...form, matching_pairs: next });
-                        }}
-                        data-testid={`input-matching-left-${index}`}
-                      />
-                      <span className="pair-separator" style={{ color: 'var(--text-muted)' }}>↔</span>
-                      <input
-                        type="text"
-                        placeholder={`Right Match ${index + 1} (e.g. ATP production)`}
-                        value={pair.right}
-                        onChange={(e) => {
-                          const next = [...form.matching_pairs];
-                          next[index] = { ...next[index], right: e.target.value };
-                          setForm({ ...form, matching_pairs: next });
-                        }}
-                        data-testid={`input-matching-right-${index}`}
-                      />
+
+                <div style={{ display: 'flex', gap: '2rem', alignItems: 'flex-start' }}>
+                  {/* Column A Editor */}
+                  <div style={{ flex: 1 }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: '0.5rem',
+                      }}
+                    >
+                      <strong style={{ fontSize: '0.9rem' }}>Column A — Items to Match</strong>
                       <button
                         type="button"
-                        className="icon-button"
-                        aria-label={`Remove pair ${index + 1}`}
-                        disabled={form.matching_pairs.length <= 2}
+                        className="button button-quiet button-sm"
                         onClick={() =>
                           setForm((prev) => ({
                             ...prev,
-                            matching_pairs: prev.matching_pairs.filter((_, i) => i !== index),
+                            column_a_items: [
+                              ...prev.column_a_items,
+                              { id: `col-a-${Date.now()}`, text: '', correct_option_id: null },
+                            ],
                           }))
                         }
-                        data-testid={`button-remove-matching-pair-${index}`}
+                        data-testid="button-add-column-a-item"
                       >
-                        <X size={14} />
+                        <Plus size={14} /> Add item
                       </button>
                     </div>
-                  ))}
+                    <div className="matching-column-editor" data-testid="column-a-editor">
+                      {form.column_a_items.map((item, index) => (
+                        <div key={item.id} className="matching-item-row">
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', minWidth: '24px' }}>
+                            {index + 1}.
+                          </span>
+                          <input
+                            type="text"
+                            placeholder="Item text (e.g. Capital of Ethiopia)"
+                            value={item.text}
+                            onChange={(e) => {
+                              const next = [...form.column_a_items];
+                              next[index] = { ...next[index], text: e.target.value };
+                              setForm({ ...form, column_a_items: next });
+                            }}
+                            data-testid={`input-column-a-${index}`}
+                            style={{ flex: 1 }}
+                          />
+                          <select
+                            value={item.correct_option_id ?? ''}
+                            onChange={(e) => {
+                              const next = [...form.column_a_items];
+                              next[index] = { ...next[index], correct_option_id: e.target.value || null };
+                              setForm({ ...form, column_a_items: next });
+                            }}
+                            data-testid={`select-correct-option-${index}`}
+                            style={{ minWidth: '120px', marginLeft: '0.5rem' }}
+                          >
+                            <option value="">Select match</option>
+                            {form.column_b_options.map((opt, bIndex) => (
+                              <option key={opt.id} value={opt.id}>
+                                {/* Same A/B/C letters as the Column B rows, so the
+                                    pick reads as "A", "B"… rather than bare text. */}
+                                {String.fromCharCode(65 + bIndex)}.{' '}
+                                {opt.text || `Option ${bIndex + 1}`}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            className="icon-button"
+                            aria-label={`Remove item ${index + 1}`}
+                            disabled={form.column_a_items.length <= 2}
+                            onClick={() =>
+                              setForm((prev) => ({
+                                ...prev,
+                                column_a_items: prev.column_a_items.filter((_, i) => i !== index),
+                              }))
+                            }
+                            data-testid={`button-remove-column-a-${index}`}
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ))}
+                      {form.column_a_items.length === 0 && (
+                        <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                          No items in Column A. Add at least 2 items.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Column B Editor */}
+                  <div style={{ flex: 1 }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: '0.5rem',
+                      }}
+                    >
+                      <strong style={{ fontSize: '0.9rem' }}>Column B — Matching Options</strong>
+                      <button
+                        type="button"
+                        className="button button-quiet button-sm"
+                        onClick={() =>
+                          setForm((prev) => ({
+                            ...prev,
+                            column_b_options: [
+                              ...prev.column_b_options,
+                              { id: `col-b-${Date.now()}`, text: '' },
+                            ],
+                          }))
+                        }
+                        data-testid="button-add-column-b-option"
+                      >
+                        <Plus size={14} /> Add option
+                      </button>
+                    </div>
+                    <div className="matching-column-editor" data-testid="column-b-editor">
+                      {form.column_b_options.map((opt, index) => (
+                        <div key={opt.id} className="matching-item-row">
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', minWidth: '24px' }}>
+                            {String.fromCharCode(65 + index)}.
+                          </span>
+                          <input
+                            type="text"
+                            placeholder="Option text (e.g. Addis Ababa)"
+                            value={opt.text}
+                            onChange={(e) => {
+                              const next = [...form.column_b_options];
+                              next[index] = { ...next[index], text: e.target.value };
+                              setForm({ ...form, column_b_options: next });
+                            }}
+                            data-testid={`input-column-b-${index}`}
+                            style={{ flex: 1 }}
+                          />
+                          <button
+                            type="button"
+                            className="icon-button"
+                            aria-label={`Remove option ${index + 1}`}
+                            disabled={form.column_b_options.length <= 2}
+                            onClick={() =>
+                              setForm((prev) => ({
+                                ...prev,
+                                column_b_options: prev.column_b_options.filter((_, i) => i !== index),
+                              }))
+                            }
+                            data-testid={`button-remove-column-b-${index}`}
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ))}
+                      {form.column_b_options.length === 0 && (
+                        <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                          No options in Column B. Add at least 2 options.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Live preview — the same board the exam Preview tab renders,
+                    with the answer key always shown while authoring. */}
+                <div data-testid="matching-editor-preview" style={{ marginTop: '1rem' }}>
+                  <small
+                    className="field-hint"
+                    style={{ display: 'block', marginBottom: '0.4rem' }}
+                  >
+                    Live preview — students see this board; correct matches are
+                    highlighted with the answer key.
+                  </small>
+                  <MatchingBoard
+                    rows={matchingPreview.rows}
+                    rightOptions={matchingPreview.rightOptions}
+                    showKey
+                    idKey="editor"
+                  />
                 </div>
               </div>
             )}
@@ -1372,6 +1677,7 @@ export function QuestionsTab({ exam }: { exam: AdminRealExam }) {
             type="button"
             className="button button-secondary"
             onClick={() => setImportOpen(true)}
+            disabled={locked}
             data-testid="button-import-questions"
           >
             <Download size={15} /> Import JSON
@@ -1380,6 +1686,7 @@ export function QuestionsTab({ exam }: { exam: AdminRealExam }) {
             type="button"
             className="button button-primary"
             onClick={() => setDialog({ kind: 'add' })}
+            disabled={locked}
             data-testid="button-add-question"
           >
             <Plus size={16} /> Add question

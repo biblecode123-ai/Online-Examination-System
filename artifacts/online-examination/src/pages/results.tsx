@@ -1,7 +1,8 @@
 import { ChevronLeft, ChevronRight, FileCheck2, History } from 'lucide-react';
 import { Link, useParams } from 'wouter';
 import { EmptyState, ErrorBox, LoadingBlock, Metric, PageTitle, Status } from '../components/shell';
-import { dateLabel } from '../lib/format';
+import { dateLabel, formatMatchingAnswer, parseMatchingAnswer } from '../lib/format';
+import { MatchingBoard, type MatchingBoardRow } from './admin/exams/preview';
 import { isFinishedAttempt } from '../lib/examState';
 import { useExams, useMyAttempts, useResult } from '../lib/queries';
 import { useAuth } from '../lib/auth';
@@ -256,6 +257,51 @@ export function ResultDetails() {
             const isCorrect = item.student_answer.answer_status === 'correct';
             const isMissed = item.student_answer.answer_status === 'unanswered';
             const points = item.points ?? 1;
+            // Column B order for matching rows: the review record's own
+            // matching_data (BACKEND_PATCH §3d-6) when present, else the row's
+            // options. Letters only appear when an order is available — an
+            // invented letter could contradict what the student saw.
+            const matchingData = item.matching_data;
+            const rightOrder = matchingData?.right_options?.length
+              ? matchingData.right_options.map((option) => option.text)
+              : item.options?.length > 0
+                ? item.options.map((option) => option.text)
+                : null;
+            const yourResponse =
+              formatMatchingAnswer(item.student_answer.answer_text, rightOrder) ??
+              (item.student_answer.selected_option_text ||
+                item.student_answer.answer_text ||
+                'No response recorded');
+            const correctResponse =
+              formatMatchingAnswer(item.correct_answer.option_text, rightOrder) ??
+              item.correct_answer.option_text;
+
+            // Lettered key board for matching rows — this section only renders
+            // when the institution released the review, so showing the correct
+            // matches is intended. Rows without a column order fall back to
+            // the text lines below the board's absence.
+            let matchingRows: MatchingBoardRow[] | null = null;
+            if (item.question_type === 'matching' && rightOrder) {
+              if (matchingData?.left_items?.length) {
+                matchingRows = matchingData.left_items.map((leftItem) => ({
+                  left: leftItem.text,
+                  correctRightIndex:
+                    leftItem.correct_option_id == null
+                      ? null
+                      : matchingData.right_options.findIndex(
+                          (option) => String(option.id) === String(leftItem.correct_option_id),
+                        ),
+                }));
+              } else {
+                const keyPairs = parseMatchingAnswer(item.correct_answer.option_text);
+                if (keyPairs) {
+                  matchingRows = keyPairs.map(([left, right]) => ({
+                    left,
+                    correctRightIndex: rightOrder.indexOf(right),
+                  }));
+                }
+              }
+            }
             return (
               <div className={`review-answer ${isCorrect ? 'correct' : 'incorrect'} ${isMissed ? 'missed' : ''}`} key={`${item.question_id}-${index}`}>
                 <span>{String(index + 1).padStart(2, '0')}</span>
@@ -266,14 +312,21 @@ export function ResultDetails() {
                   </small>
                   <small>
                     Your response:{' '}
-                    {item.student_answer.selected_option_text ||
-                      item.student_answer.answer_text ||
-                      'No response recorded'}
+                    {yourResponse}
                   </small>
-                  {!isCorrect && (
-                    <small>
-                      Correct answer: {item.correct_answer.option_text || '—'}
-                    </small>
+                  {matchingRows && rightOrder ? (
+                    <MatchingBoard
+                      rows={matchingRows}
+                      rightOptions={rightOrder}
+                      showKey
+                      idKey={`result-${item.question_id}`}
+                    />
+                  ) : (
+                    !isCorrect && (
+                      <small>
+                        Correct answer: {correctResponse || '—'}
+                      </small>
+                    )
                   )}
                   {item.explanation && (
                     <small className="explanation">

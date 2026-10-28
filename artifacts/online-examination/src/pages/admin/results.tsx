@@ -271,6 +271,7 @@ export function AdminResults() {
   const [selectedExamId, setSelectedExamId] = useState<number | null>(null);
   const [examPage, setExamPage] = useState(1);
   const [expandedAttemptId, setExpandedAttemptId] = useState<number | null>(null);
+  const [selectedDepartmentId, setSelectedDepartmentId] = useState<number | null>(null);
 
   const urlSearch = params.get('search') ?? '';
   const [searchInput, setSearchInput] = useState(urlSearch);
@@ -490,6 +491,31 @@ export function AdminResults() {
   const currentPage = page?.current_page ?? 1;
   const lastPage = page?.last_page ?? 1;
   const totalRecords = page?.total ?? 0;
+
+  // Group rows by department for clustered display
+  const rowsByDepartment = useMemo(() => {
+    const departments: Record<number, AdminResultRow[]> = {};
+    
+    rows.forEach((row) => {
+      const deptId = row.exam.department_id ?? 0;
+      if (!departments[deptId]) {
+        departments[deptId] = [];
+      }
+      departments[deptId].push(row);
+    });
+    
+    return departments;
+  }, [rows]);
+
+  const departmentOptions = useMemo(() => {
+    const allDepts = options?.departments ?? [];
+    // Get unique departments from the filtered results
+    const deptIds = new Set<number>();
+    rows.forEach((row) => {
+      deptIds.add(row.exam.department_id ?? 0);
+    });
+    return allDepts.filter((dept) => deptIds.has(dept.id));
+  }, [options, rows]);
 
   return (
     <>
