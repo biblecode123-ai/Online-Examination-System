@@ -466,24 +466,63 @@ export const adminApi = {
     page?: number;
     perPage?: number;
   }): Promise<Paginated<User>> {
+    const queryParams: Record<string, any> = {
+      ...params,
+      per_page: params?.perPage ?? 20,
+    };
     const body = await apiRequest<any>('/v1/admin/users', {
-      query: params,
+      query: queryParams,
     });
+
+    let rawList: User[] = [];
+    let metaPagination: any = null;
+
     if (body?.data && Array.isArray(body.data.data)) {
-      return {
-        data: body.data.data,
-        meta: {
-          total: body.data.pagination?.total ?? body.pagination?.total ?? body.data.counts?.all ?? body.data.data.length,
-          current_page: body.data.pagination?.current_page ?? body.pagination?.current_page ?? params?.page ?? 1,
-          per_page: body.data.pagination?.per_page ?? body.pagination?.per_page ?? params?.perPage ?? 20,
-          last_page: body.data.pagination?.total_pages ?? body.pagination?.total_pages ?? 1,
-        },
-      };
+      rawList = body.data.data;
+      metaPagination = body.data.pagination ?? body.pagination ?? body.meta?.pagination;
+    } else if (Array.isArray(body?.data)) {
+      rawList = body.data;
+      metaPagination = body.meta?.pagination ?? body.pagination;
+    } else if (Array.isArray(body)) {
+      rawList = body;
     }
-    if (Array.isArray(body?.data)) {
-      return body;
-    }
-    return { data: [], meta: { total: 0 } };
+
+    const total = Number(
+      metaPagination?.total ??
+      body?.meta?.total ??
+      body?.total ??
+      body?.data?.counts?.all ??
+      rawList.length
+    );
+    const perPage = Number(
+      metaPagination?.per_page ??
+      body?.meta?.per_page ??
+      params?.perPage ??
+      20
+    );
+    const lastPage = Number(
+      metaPagination?.total_pages ??
+      metaPagination?.last_page ??
+      body?.meta?.last_page ??
+      body?.last_page ??
+      Math.max(1, Math.ceil(total / perPage))
+    );
+    const currentPage = Number(
+      metaPagination?.current_page ??
+      body?.meta?.current_page ??
+      params?.page ??
+      1
+    );
+
+    return {
+      data: rawList,
+      meta: {
+        total,
+        current_page: currentPage,
+        last_page: lastPage,
+        per_page: perPage,
+      },
+    };
   },
 
   /**

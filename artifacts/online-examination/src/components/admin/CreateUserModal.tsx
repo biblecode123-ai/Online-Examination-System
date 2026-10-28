@@ -19,11 +19,14 @@ export function CreateUserModal({ isOpen, onClose }: CreateUserModalProps) {
   });
   const queryClient = useQueryClient();
 
-  const { data: departments = [] } = useQuery({
-    queryKey: ['admin-departments'],
+  const { data: rawDepts } = useQuery({
+    queryKey: ['admin-departments-list'],
     queryFn: () => adminExamApi.departments(),
     staleTime: 5 * 60_000,
   });
+  const departments: Array<{ id: number; name: string; college?: string | null }> = Array.isArray(rawDepts)
+    ? rawDepts
+    : ((rawDepts as any)?.items ?? []);
 
   const createUserMutation = useMutation({
     mutationFn: adminApi.createUser,

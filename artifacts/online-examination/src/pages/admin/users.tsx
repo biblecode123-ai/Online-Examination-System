@@ -32,21 +32,16 @@ export function AdminUsers() {
   });
 
   const { data: departmentsData, isLoading: departmentsLoading, error: departmentsError } = useQuery({
-    queryKey: ['admin-departments'],
-    queryFn: async () => {
-      try {
-        const response = await adminApi.listDepartments({ per_page: 100 });
-        console.log('Departments loaded:', response);
-        return response;
-      } catch (err) {
-        console.error('Failed to load departments:', err);
-        throw err;
-      }
-    },
+    queryKey: ['admin-departments-list'],
+    queryFn: () => adminExamApi.departments(),
     staleTime: 5 * 60_000,
   });
 
-  const departments = departmentsData?.items ?? [];
+  const departments: Array<{ id: number; name: string; college?: string | null }> = useMemo(() => {
+    if (Array.isArray(departmentsData)) return departmentsData;
+    if (departmentsData && Array.isArray((departmentsData as any).items)) return (departmentsData as any).items;
+    return [];
+  }, [departmentsData]);
 
   const deleteUserMutation = useMutation({
     mutationFn: adminApi.deleteUser,
@@ -75,21 +70,26 @@ export function AdminUsers() {
   const displayUsers = useMemo(() => {
     if (!departmentFilter) return userList;
     const selectedDept = departments.find((d) => d.id === departmentFilter);
-    const selectedDeptName = selectedDept?.name.toLowerCase();
+    const selectedDeptName = selectedDept?.name ? String(selectedDept.name).toLowerCase() : '';
 
     return userList.filter((u) => {
       if (u.department_id && u.department_id === departmentFilter) return true;
       if (u.dept_id && u.dept_id === departmentFilter) return true;
       if (u.department_detail?.id && u.department_detail.id === departmentFilter) return true;
-      if (selectedDeptName && u.department) {
-        const deptLower = u.department.toLowerCase();
+
+      const deptVal = typeof u.department === 'string'
+        ? u.department
+        : (typeof (u.department as any)?.name === 'string' ? (u.department as any).name : '');
+
+      if (selectedDeptName && deptVal) {
+        const deptLower = deptVal.toLowerCase();
         return deptLower.includes(selectedDeptName) || selectedDeptName.includes(deptLower);
       }
       return false;
     });
   }, [userList, departmentFilter, departments]);
 
-  const totalUsers = departmentFilter ? displayUsers.length : (users?.meta?.total || userList.length);
+  const totalUsers = departmentFilter ? displayUsers.length : (users?.meta?.total ?? userList.length);
 
   const getRoleBadgeClass = (role: string) => {
     switch (role) {
@@ -133,7 +133,7 @@ export function AdminUsers() {
               <Users size={20} />
             </div>
             <div className="user-stat-content">
-              <strong>{totalUsers.toLocaleString()}</strong>
+              <strong>{(totalUsers ?? 0).toLocaleString()}</strong>
               <small>Total Users</small>
             </div>
           </div>
@@ -142,7 +142,7 @@ export function AdminUsers() {
               <Shield size={20} />
             </div>
             <div className="user-stat-content">
-              <strong>{displayUsers.filter(u => u.is_active).length}</strong>
+              <strong>{displayUsers.filter(u => Boolean(u.is_active || (u as any).status === 'active')).length}</strong>
               <small>Active Users</small>
             </div>
           </div>
@@ -151,7 +151,7 @@ export function AdminUsers() {
               <PowerOff size={20} />
             </div>
             <div className="user-stat-content">
-              <strong>{displayUsers.filter(u => !u.is_active).length}</strong>
+              <strong>{displayUsers.filter(u => !u.is_active && (u as any).status !== 'active').length}</strong>
               <small>Inactive Users</small>
             </div>
           </div>
@@ -272,26 +272,30 @@ export function AdminUsers() {
                       <td>
                         <div className="user-cell">
                           <div className="user-avatar">
-                            {user.name?.charAt(0).toUpperCase() || 'U'}
+                            {user.name?.trim() ? user.name.trim().charAt(0).toUpperCase() : 'U'}
                           </div>
                           <div className="user-info">
-                            <strong>{user.name}</strong>
-                            <small>{user.email}</small>
+                            <strong>{user.name || 'Unnamed User'}</strong>
+                            <small>{user.email || '—'}</small>
                           </div>
                         </div>
                       </td>
                       <td>
-                          <span className={`badge ${getRoleBadgeClass(user.role_slug ?? '')}`}>
-                          {user.role_slug}
+                        <span className={`badge ${getRoleBadgeClass(user.role_slug || user.role || '')}`}>
+                          {user.role_slug || user.role || 'user'}
                         </span>
                       </td>
                       <td>
                         <span className="text-muted">
-                          {user.department_detail?.name || user.department || 'N/A'}
+                          {user.department_detail?.name ||
+                            (typeof user.department === 'string'
+                              ? user.department
+                              : (typeof (user.department as any)?.name === 'string' ? (user.department as any).name : '')) ||
+                            'N/A'}
                         </span>
                       </td>
                       <td>
-                        {user.is_active ? (
+                        {Boolean(user.is_active || (user as any).status === 'active') ? (
                           <span className="status status-green">Active</span>
                         ) : (
                           <span className="status status-red">Inactive</span>
@@ -345,12 +349,12 @@ export function AdminUsers() {
                 Previous
               </button>
               <span className="pagination-info">
-                Page {page} of {users.meta?.last_page}
+                Page {page} of {users.meta?.last_page ?? 1}
               </span>
               <button
                 className="pagination-button"
                 onClick={() => setPage(p => Math.min(users.meta?.last_page ?? 1, p + 1))}
-                disabled={page === (users.meta?.last_page ?? 1)}
+                disabled={page >= (users.meta?.last_page ?? 1)}
               >
                 Next
               </button>

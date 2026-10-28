@@ -27,9 +27,9 @@ const DEFAULT_INSTRUCTIONS = `1. Ensure you are in a quiet environment with a st
  * Create a new official Real Exam.
  *
  * Only exams of the existing `Real Exam` category may be created through this
- * workflow — the category is fetched from the backend (never hardcoded). The
+ * workflow â the category is fetched from the backend (never hardcoded). The
  * governed store endpoint (POST /v1/teacher/real-exams) accepts title,
- * description, exam-level instructions, one or more departments, duration (1–480 min),
+ * description, exam-level instructions, one or more departments, duration (1â480 min),
  * passing percentage, and a REQUIRED password; every exam is born as a draft.
  */
 export function AdminExamCreate() {
@@ -59,7 +59,7 @@ export function AdminExamCreate() {
     staleTime: 5 * 60_000,
   });
 
-  /** The one category this workflow may create — resolved from the backend. */
+  /** The one category this workflow may create â resolved from the backend. */
   const realCategory = useMemo(() => {
     const cats = catQuery.data ?? [];
     return (
@@ -195,7 +195,7 @@ export function AdminExamCreate() {
       <PageTitle
         eyebrow="ADMIN PORTAL / EXAMS"
         title="Create an official examination"
-        detail="Real Exam category · saved as a draft until you publish it"
+        detail="Real Exam category Â· saved as a draft until you publish it"
         action={
           <Link href="/admin/exams" className="button button-secondary">
             <ArrowLeft size={15} /> Back to exams
@@ -204,7 +204,7 @@ export function AdminExamCreate() {
       />
 
       {catQuery.isLoading ? (
-        <LoadingBlock label="Resolving the exam category…" />
+        <LoadingBlock label="Resolving the exam categoryâ¦" />
       ) : (
         !realCategory && (
           <div className="exam-alert" role="alert">
@@ -223,7 +223,7 @@ export function AdminExamCreate() {
         {/* SECTION 1: BASIC INFORMATION */}
         <div className="card exam-form-section">
           <div className="card-header">
-            <h2>1 · Basic information</h2>
+            <h2>1 Â· Basic information</h2>
           </div>
           <div className="card-body exam-form-grid">
             <div className="form-group span-2">
@@ -233,7 +233,7 @@ export function AdminExamCreate() {
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Data Structures & Algorithms — Final Examination"
+                placeholder="e.g. Data Structures & Algorithms â Final Examination"
                 data-testid="input-exam-title"
               />
               {errFor('title', 'exam_title') && (
@@ -261,7 +261,7 @@ export function AdminExamCreate() {
                 readOnly
                 value={
                   catQuery.isLoading
-                    ? 'Loading…'
+                    ? 'Loadingâ¦'
                     : realCategory
                       ? `${realCategory.name} (#${realCategory.id})`
                       : 'Real Exam (not found on server)'
@@ -280,14 +280,14 @@ export function AdminExamCreate() {
         <div className="card exam-form-section">
           <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <h2>2 · Target departments *</h2>
+              <h2>2 Â· Target departments *</h2>
               <small className="text-muted">
                 Select one or more departments eligible to take this examination.
               </small>
             </div>
             <span className="badge badge-blue">
               {deptQuery.isLoading
-                ? 'Loading departments…'
+                ? 'Loading all departments...'
                 : `${deptQuery.data?.length ?? 0} total departments`}
             </span>
           </div>
@@ -299,7 +299,7 @@ export function AdminExamCreate() {
             )}
 
             {deptQuery.isLoading ? (
-              <LoadingBlock label="Fetching all departments from server…" />
+              <LoadingBlock label="Loading all departmentsâ¦" />
             ) : deptQuery.isError ? (
               <ErrorBox error={deptQuery.error} onRetry={() => void deptQuery.refetch()} />
             ) : (
@@ -310,7 +310,7 @@ export function AdminExamCreate() {
                     <Search size={15} />
                     <input
                       type="text"
-                      placeholder="Search departments by name, college, code…"
+                      placeholder="Search departments by name, college, codeâ¦"
                       value={deptSearch}
                       onChange={(e) => setDeptSearch(e.target.value)}
                       data-testid="input-dept-search"
@@ -449,7 +449,7 @@ export function AdminExamCreate() {
             style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
           >
             <div>
-              <h2>3 · Exam-level instructions for students</h2>
+              <h2>3 Â· Exam-level instructions for students</h2>
               <small className="text-muted">
                 General rules and directions presented to students before unlocking and attempting the exam.
               </small>
@@ -499,7 +499,7 @@ export function AdminExamCreate() {
         {/* SECTION 4: EXAMINATION CONFIGURATION */}
         <div className="card exam-form-section">
           <div className="card-header">
-            <h2>4 · Examination configuration</h2>
+            <h2>4 Â· Examination configuration</h2>
           </div>
           <div className="card-body exam-form-grid">
             <div className="form-group">
@@ -517,7 +517,7 @@ export function AdminExamCreate() {
                 <small className="field-error">{errFor('total_time', 'total_time')}</small>
               )}
               <small className="field-hint">
-                The server enforces this clock — extending a frontend timer has no effect.
+                The server enforces this clock â extending a frontend timer has no effect.
               </small>
             </div>
 
@@ -576,7 +576,7 @@ export function AdminExamCreate() {
             data-testid="button-save-draft"
           >
             <Save size={16} />
-            {createMutation.isPending ? 'Creating draft…' : 'Save as draft'}
+            {createMutation.isPending ? 'Creating draftâ¦' : 'Save as draft'}
           </button>
         </div>
         <small className="field-hint form-footnote">
