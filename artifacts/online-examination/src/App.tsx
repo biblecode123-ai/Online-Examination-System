@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   UserRound,
 } from 'lucide-react';
+import { AdminSettings } from './pages/admin/settings';
 import { Link, Route, Switch, useLocation } from 'wouter';
 import { AuthProvider, useAuth } from './lib/auth';
 import { initials } from './lib/format';
@@ -361,6 +362,7 @@ function RouterRoot() {
           <Route path="/admin/exams/:id" component={AdminExamDetail} />
           <Route path="/admin/exams" component={AdminExams} />
           <Route path="/admin/results" component={AdminResults} />
+          <Route path="/admin/settings" component={AdminSettings} />
           <Route path="/admin/results/:attemptId" component={AdminResultDetail} />
           <Route path="/admin/profile" component={Profile} />
           <Route path="/admin/:rest*" component={AdminDashboard} />
