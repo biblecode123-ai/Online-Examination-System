@@ -584,6 +584,16 @@ function QuestionDialog({
     },
   });
 
+  const deletePassageMutation = useMutation({
+    mutationFn: (id: number) => adminExamApi.deletePassage(id),
+    onSuccess: (_, deletedId) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-passages'] });
+      if (form.passage_id === String(deletedId)) {
+        setForm((prev) => ({ ...prev, passage_id: '' }));
+      }
+    },
+  });
+
   const setOption = (index: number, patch: Partial<OptionDraft>, singleCorrect: boolean) => {
     setForm((prev) => ({
       ...prev,
@@ -900,25 +910,30 @@ function QuestionDialog({
                     <input
                       type="search"
                       value={passageSearch}
-                      placeholder="Search passages by title or content…"
+                      placeholder="Search my passages by title or content…"
                       onChange={(e) => setPassageSearch(e.target.value)}
                       aria-label="Search passages"
                       data-testid="input-passage-search"
                     />
                   </div>
 
+                  <ErrorBox error={deletePassageMutation.error} testId="passage-delete-error" />
+
                   {filteredPassages.length === 0 ? (
                     <small className="text-muted passage-empty" data-testid="passage-search-empty">
                       {passages.length === 0
-                        ? 'No passages yet — write the first one below.'
+                        ? 'You haven’t created any passages yet — write your first one below.'
                         : `No passages match “${passageSearch.trim()}”.`}
                     </small>
                   ) : (
                     <ul className="passage-picker" data-testid="passage-picker-list">
                       {filteredPassages.map((passage) => {
                         const selected = String(passage.id) === form.passage_id;
+                        const isDeleting =
+                          deletePassageMutation.isPending &&
+                          deletePassageMutation.variables === passage.id;
                         return (
-                          <li key={passage.id}>
+                          <li key={passage.id} className="passage-picker-item">
                             <button
                               type="button"
                               className={`passage-option${selected ? ' is-selected' : ''}`}
@@ -932,6 +947,27 @@ function QuestionDialog({
                               <small>
                                 {(passage.content ?? '').slice(0, 140) || 'Empty passage'}
                               </small>
+                            </button>
+                            <button
+                              type="button"
+                              className="passage-delete-btn"
+                              title={`Delete passage "${passage.title || '#' + passage.id}"`}
+                              aria-label={`Delete passage ${passage.title || '#' + passage.id}`}
+                              disabled={isDeleting}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const label = passage.title || `Passage #${passage.id}`;
+                                if (
+                                  window.confirm(
+                                    `Are you sure you want to delete "${label}"? This will delete the passage and unlink it from questions.`,
+                                  )
+                                ) {
+                                  deletePassageMutation.mutate(passage.id);
+                                }
+                              }}
+                              data-testid={`button-delete-passage-option-${passage.id}`}
+                            >
+                              <Trash2 size={13} />
                             </button>
                           </li>
                         );

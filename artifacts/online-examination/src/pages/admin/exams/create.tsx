@@ -1,20 +1,36 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation } from 'wouter';
-import { ArrowLeft, Info, Save } from 'lucide-react';
+import {
+  ArrowLeft,
+  CheckSquare,
+  FileText,
+  Info,
+  RotateCcw,
+  Save,
+  Search,
+  Sparkles,
+  Square,
+  X,
+} from 'lucide-react';
 import { adminExamApi } from '../../../lib/endpoints';
 import { ApiError } from '../../../lib/api';
 import { ErrorBox, LoadingBlock, PageTitle } from '../../../components/shell';
 
-/** 
- * Create a new official Real Exam. 
- * 
+const DEFAULT_INSTRUCTIONS = `1. Ensure you are in a quiet environment with a stable internet connection.
+2. Read each question carefully before submitting your answer.
+3. Your responses are automatically saved in the background. If your connection drops, reconnect promptly to continue.
+4. Leaving full-screen mode, switching tabs, or using external aids is strictly monitored and recorded.
+5. All unanswered questions will receive zero marks. Ensure you review your work before clicking Final Submit.`;
+
+/**
+ * Create a new official Real Exam.
+ *
  * Only exams of the existing `Real Exam` category may be created through this
  * workflow — the category is fetched from the backend (never hardcoded). The
  * governed store endpoint (POST /v1/teacher/real-exams) accepts title,
- * description, ONE OR MORE departments, duration (1–480 min), passing percentage and a
- * REQUIRED password; every exam is born as a draft. Cross-checked against
- * TeacherRealExamController::store in ofijan-backend.
+ * description, exam-level instructions, one or more departments, duration (1–480 min),
+ * passing percentage, and a REQUIRED password; every exam is born as a draft.
  */
 export function AdminExamCreate() {
   const [, setLocation] = useLocation();
@@ -22,7 +38,10 @@ export function AdminExamCreate() {
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [instructions, setInstructions] = useState('');
   const [departmentIds, setDepartmentIds] = useState<number[]>([]);
+  const [deptSearch, setDeptSearch] = useState('');
+  const [selectedCollege, setSelectedCollege] = useState<string>('all');
   const [totalTime, setTotalTime] = useState(60);
   const [passing, setPassing] = useState(50);
   const [password, setPassword] = useState('');
@@ -33,6 +52,7 @@ export function AdminExamCreate() {
     queryFn: ({ signal }) => adminExamApi.departments(signal),
     staleTime: 5 * 60_000,
   });
+
   const catQuery = useQuery({
     queryKey: ['admin-exams', 'categories'],
     queryFn: ({ signal }) => adminExamApi.categories(signal),
@@ -50,16 +70,86 @@ export function AdminExamCreate() {
     );
   }, [catQuery.data]);
 
+  /** List of distinct colleges for filtering departments */
+  const colleges = useMemo(() => {
+    const list = deptQuery.data ?? [];
+    const set = new Set<string>();
+    for (const d of list) {
+      if (d.college && d.college.trim()) {
+        set.add(d.college.trim());
+      }
+    }
+    return Array.from(set).sort();
+  }, [deptQuery.data]);
+
+  /** Filter departments by search keyword and college */
+  const filteredDepartments = useMemo(() => {
+    const list = deptQuery.data ?? [];
+    const q = deptSearch.trim().toLowerCase();
+    return list.filter((dept) => {
+      const matchesSearch =
+        !q ||
+        dept.name.toLowerCase().includes(q) ||
+        (dept.college && dept.college.toLowerCase().includes(q)) ||
+        (dept.abbreviation && dept.abbreviation.toLowerCase().includes(q));
+      const matchesCollege = selectedCollege === 'all' || dept.college === selectedCollege;
+      return matchesSearch && matchesCollege;
+    });
+  }, [deptQuery.data, deptSearch, selectedCollege]);
+
+  /** Selected department objects for chips display */
+  const selectedDeptObjects = useMemo(() => {
+    const list = deptQuery.data ?? [];
+    const map = new Map(list.map((d) => [d.id, d]));
+    return departmentIds.map((id) => map.get(id)).filter(Boolean) as {
+      id: number;
+      name: string;
+      college?: string | null;
+    }[];
+  }, [deptQuery.data, departmentIds]);
+
+  const toggleDepartment = (id: number) => {
+    setDepartmentIds((prev) =>
+      prev.includes(id) ? prev.filter((d) => d !== id) : [...prev, id],
+    );
+  };
+
+  const selectAllFiltered = () => {
+    const ids = filteredDepartments.map((d) => d.id);
+    setDepartmentIds((prev) => Array.from(new Set([...prev, ...ids])));
+  };
+
+  const clearSelection = () => {
+    setDepartmentIds([]);
+  };
+
   const createMutation = useMutation({
-    mutationFn: () =>
-      adminExamApi.createExam({
+    mutationFn: async () => {
+      const exam = await adminExamApi.createExam({
         exam_title: title.trim(),
         description: description.trim() || null,
+        instructions: instructions.trim() || null,
+        department_id: departmentIds[0],
         department_ids: departmentIds.length > 0 ? departmentIds : undefined,
         total_time: Number(totalTime),
         passing_percentage: Number(passing),
         exam_password: password,
-      }),
+      });
+
+      // Also persist instructions to structure if provided
+      if (instructions.trim()) {
+        try {
+          await adminExamApi.putStructure(exam.id, {
+            instructions: instructions.trim(),
+            sections: [],
+          });
+        } catch (e) {
+          console.warn('Could not save instructions via putStructure:', e);
+        }
+      }
+
+      return exam;
+    },
     onSuccess: (exam) => {
       queryClient.invalidateQueries({ queryKey: ['admin-exams'] });
       setLocation(`/admin/exams/${exam.id}`);
@@ -124,6 +214,7 @@ export function AdminExamCreate() {
       <ErrorBox error={error} testId="create-exam-error" />
 
       <form onSubmit={submit} noValidate>
+        {/* SECTION 1: BASIC INFORMATION */}
         <div className="card exam-form-section">
           <div className="card-header">
             <h2>1 · Basic information</h2>
@@ -136,7 +227,7 @@ export function AdminExamCreate() {
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Data Structures — Final Examination"
+                placeholder="e.g. Data Structures & Algorithms — Final Examination"
                 data-testid="input-exam-title"
               />
               {errFor('title', 'exam_title') && (
@@ -156,7 +247,7 @@ export function AdminExamCreate() {
               />
             </div>
 
-            <div className="form-group">
+            <div className="form-group span-2">
               <label htmlFor="exam-category">Exam category</label>
               <input
                 id="exam-category"
@@ -176,36 +267,233 @@ export function AdminExamCreate() {
                 This workflow only creates official Real Exams; the category comes from the backend.
               </small>
             </div>
+          </div>
+        </div>
 
-            <div className="form-group span-2">
-              <label htmlFor="exam-departments">Departments *</label>
-              <select
-                id="exam-departments"
-                className="select"
-                multiple
-                data-testid="select-exam-departments"
-              >
-                <option value="">Select departments…</option>
-                {(deptQuery.data ?? []).map((dept) => (
-                  <option key={dept.id} value={dept.id}>
-                    {dept.name}
-                  </option>
-                ))}
-              </select>
-              <br />
-              <small className="field-hint">
-                Select one or more departments for this exam.
+        {/* SECTION 2: TARGET DEPARTMENTS (Fixed & Redesigned) */}
+        <div className="card exam-form-section">
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h2>2 · Target departments *</h2>
+              <small className="text-muted">
+                Select one or more departments eligible to take this examination.
               </small>
-              {errFor('department', 'department_ids') && (
-                <small className="field-error">{errFor('department', 'department_ids')}</small>
+            </div>
+            <span className="badge badge-blue">
+              {deptQuery.isLoading
+                ? 'Loading departments…'
+                : `${deptQuery.data?.length ?? 0} total departments`}
+            </span>
+          </div>
+          <div className="card-body">
+            {errFor('department', 'department_ids') && (
+              <small className="field-error" style={{ display: 'block', marginBottom: 12 }}>
+                {errFor('department', 'department_ids')}
+              </small>
+            )}
+
+            {deptQuery.isLoading ? (
+              <LoadingBlock label="Fetching all departments from server…" />
+            ) : deptQuery.isError ? (
+              <ErrorBox error={deptQuery.error} onRetry={() => void deptQuery.refetch()} />
+            ) : (
+              <div className="dept-selector-container">
+                {/* Search and Filter Toolbar */}
+                <div className="dept-selector-toolbar">
+                  <div className="dept-selector-search-wrap">
+                    <Search size={15} />
+                    <input
+                      type="text"
+                      placeholder="Search departments by name, college, code…"
+                      value={deptSearch}
+                      onChange={(e) => setDeptSearch(e.target.value)}
+                      data-testid="input-dept-search"
+                    />
+                  </div>
+
+                  {colleges.length > 0 && (
+                    <select
+                      className="select"
+                      style={{ height: 36, fontSize: 13, width: 'auto', minWidth: 160 }}
+                      value={selectedCollege}
+                      onChange={(e) => setSelectedCollege(e.target.value)}
+                      data-testid="select-college-filter"
+                    >
+                      <option value="all">All Colleges ({colleges.length})</option>
+                      {colleges.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
+                  <div className="dept-selector-actions">
+                    <button
+                      type="button"
+                      className="dept-selector-btn"
+                      onClick={selectAllFiltered}
+                      title="Select all currently filtered departments"
+                    >
+                      <CheckSquare size={14} /> Select Filtered ({filteredDepartments.length})
+                    </button>
+                    {departmentIds.length > 0 && (
+                      <button
+                        type="button"
+                        className="dept-selector-btn"
+                        onClick={clearSelection}
+                        title="Deselect all departments"
+                      >
+                        <RotateCcw size={14} /> Clear Selection
+                      </button>
+                    )}
+                    <span className="dept-selector-count">
+                      Selected: <strong>{departmentIds.length}</strong> of {deptQuery.data?.length ?? 0}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Selected Departments Chips Bar */}
+                {selectedDeptObjects.length > 0 && (
+                  <div className="dept-selected-chips-area">
+                    {selectedDeptObjects.map((d) => (
+                      <span key={d.id} className="dept-chip">
+                        <span>{d.name}</span>
+                        <button
+                          type="button"
+                          className="dept-chip-remove"
+                          onClick={() => toggleDepartment(d.id)}
+                          aria-label={`Remove ${d.name}`}
+                        >
+                          <X size={13} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Scrollable Department Grid */}
+                <div className="dept-selector-list" data-testid="dept-selector-list">
+                  {filteredDepartments.length === 0 ? (
+                    <div className="dept-selector-empty">
+                      <p>No departments found matching "{deptSearch}".</p>
+                      {deptSearch && (
+                        <button
+                          type="button"
+                          className="button button-secondary"
+                          style={{ marginTop: 8 }}
+                          onClick={() => {
+                            setDeptSearch('');
+                            setSelectedCollege('all');
+                          }}
+                        >
+                          Reset search filter
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    filteredDepartments.map((dept) => {
+                      const isSelected = departmentIds.includes(dept.id);
+                      return (
+                        <div
+                          key={dept.id}
+                          className={`dept-item-card ${isSelected ? 'is-selected' : ''}`}
+                          onClick={() => toggleDepartment(dept.id)}
+                          role="checkbox"
+                          aria-checked={isSelected}
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === ' ' || e.key === 'Enter') {
+                              e.preventDefault();
+                              toggleDepartment(dept.id);
+                            }
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            className="dept-item-checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleDepartment(dept.id)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          <div className="dept-item-info">
+                            <span className="dept-item-name" title={dept.name}>
+                              {dept.name}
+                            </span>
+                            {dept.college && (
+                              <span className="dept-item-college" title={dept.college}>
+                                {dept.college}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* SECTION 3: EXAM LEVEL INSTRUCTIONS */}
+        <div className="card exam-form-section">
+          <div
+            className="card-header"
+            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+          >
+            <div>
+              <h2>3 · Exam-level instructions for students</h2>
+              <small className="text-muted">
+                General rules and directions presented to students before unlocking and attempting the exam.
+              </small>
+            </div>
+            <div className="instructions-header-actions">
+              <button
+                type="button"
+                className="instructions-template-btn"
+                onClick={() => setInstructions(DEFAULT_INSTRUCTIONS)}
+                title="Fill with standard exam instructions template"
+              >
+                <Sparkles size={14} /> Insert Standard Template
+              </button>
+              {instructions && (
+                <button
+                  type="button"
+                  className="dept-selector-btn"
+                  onClick={() => setInstructions('')}
+                  title="Clear instructions"
+                >
+                  <RotateCcw size={13} /> Clear
+                </button>
               )}
+            </div>
+          </div>
+          <div className="card-body">
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label htmlFor="exam-instructions" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <FileText size={15} /> General examination instructions
+              </label>
+              <textarea
+                id="exam-instructions"
+                rows={7}
+                value={instructions}
+                onChange={(e) => setInstructions(e.target.value)}
+                placeholder="Enter instructions for students (e.g. permitted materials, conduct rules, autosave policies, submission deadline)..."
+                data-testid="textarea-exam-instructions"
+                style={{ fontFamily: 'inherit', lineHeight: 1.5 }}
+              />
+              <small className="field-hint" style={{ marginTop: 6, display: 'block' }}>
+                Instructions are saved directly with this examination. You can also refine them later in the exam detail page.
+              </small>
             </div>
           </div>
         </div>
 
+        {/* SECTION 4: EXAMINATION CONFIGURATION */}
         <div className="card exam-form-section">
           <div className="card-header">
-            <h2>2 · Examination configuration</h2>
+            <h2>4 · Examination configuration</h2>
           </div>
           <div className="card-body exam-form-grid">
             <div className="form-group">
@@ -281,7 +569,8 @@ export function AdminExamCreate() {
             disabled={createMutation.isPending}
             data-testid="button-save-draft"
           >
-            <Save size={16} />{createMutation.isPending ? 'Creating draft…' : 'Save as draft'}
+            <Save size={16} />
+            {createMutation.isPending ? 'Creating draft…' : 'Save as draft'}
           </button>
         </div>
         <small className="field-hint form-footnote">

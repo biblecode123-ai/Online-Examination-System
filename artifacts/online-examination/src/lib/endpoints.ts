@@ -1184,6 +1184,7 @@ export type AdminExamLifecycleAction = 'ready' | 'start' | 'complete' | 'revert-
 export interface AdminExamInput {
   exam_title?: string;
   description?: string | null;
+  instructions?: string | null;
   department_id?: number;
   department_ids?: number[];
   total_time?: number;
@@ -1519,31 +1520,44 @@ export const adminExamApi = {
     return unwrap(envelope, 'Could not save the exam instructions.');
   },
 
-  /** GET /v1/departments — reference list for the filters and pickers. Fetches every page. */
-  async departments(signal?: AbortSignal): Promise<{ id: number; name: string }[]> {
-    const items: { id: number; name: string }[] = [];
+  /** GET /v1/departments/list-all or /v1/departments — reference list for filters and pickers. Fetches all departments. */
+  async departments(signal?: AbortSignal): Promise<{ id: number; name: string; college?: string | null; abbreviation?: string | null }[]> {
+    try {
+      // First try /v1/departments/list-all which returns all departments at once without pagination cap
+      const envelope = await apiRequest<{ success?: boolean; data?: { id: number; name: string; college?: string | null; abbreviation?: string | null }[] }>(
+        '/v1/departments/list-all',
+        { signal },
+      );
+      if (envelope && Array.isArray(envelope.data) && envelope.data.length > 0) {
+        return envelope.data;
+      }
+    } catch {
+      // Fallback to paginated /v1/departments
+    }
+
+    const items: { id: number; name: string; college?: string | null; abbreviation?: string | null }[] = [];
     let lastPage = 1;
-    for (let page = 1; page <= 10; page += 1) {
+    for (let page = 1; page <= 25; page += 1) {
       const response = await apiRequest<unknown>('/v1/departments', {
         query: { page, per_page: 100 },
         signal,
       });
 
-      let pageItems: { id: number; name: string }[] = [];
+      let pageItems: { id: number; name: string; college?: string | null; abbreviation?: string | null }[] = [];
       let paginatorLastPage = 1;
 
       if (Array.isArray(response)) {
-        pageItems = response as { id: number; name: string }[];
+        pageItems = response as { id: number; name: string; college?: string | null; abbreviation?: string | null }[];
       } else if (response && typeof response === 'object') {
         const obj = response as Record<string, unknown>;
         // Envelope shape: { success, data: [...] }
         if (Array.isArray(obj.data)) {
-          pageItems = obj.data as { id: number; name: string }[];
+          pageItems = obj.data as { id: number; name: string; college?: string | null; abbreviation?: string | null }[];
         }
         // Paginator shape: { data: [...], last_page, ... } or { success, data: { data: [...], last_page } }
         else if (obj.data && typeof obj.data === 'object' && !Array.isArray(obj.data) && 'data' in obj.data && Array.isArray((obj.data as Record<string, unknown>).data)) {
           const paginator = obj.data as Record<string, unknown>;
-          pageItems = (paginator.data as { id: number; name: string }[]) ?? [];
+          pageItems = (paginator.data as { id: number; name: string; college?: string | null; abbreviation?: string | null }[]) ?? [];
           paginatorLastPage = Number(paginator.last_page ?? 1);
         }
       }

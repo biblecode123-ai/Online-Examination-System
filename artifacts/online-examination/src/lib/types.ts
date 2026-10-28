@@ -841,6 +841,8 @@ export interface PassageRow {
   id: number;
   title?: string | null;
   content?: string | null;
+  created_by?: number | null;
+  created_at?: string | null;
 }
 
 /** GET /admin/results/exams/{exam} — the exam-scoped result statistics. */
